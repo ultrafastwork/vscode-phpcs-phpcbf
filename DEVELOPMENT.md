@@ -1,8 +1,8 @@
 # vscode-phpcbf
 
-![Current Version](https://img.shields.io/visual-studio-marketplace/v/ValeryanM.vscode-phpsab)
-![Installs](https://img.shields.io/visual-studio-marketplace/i/ValeryanM.vscode-phpsab)
-![GitHub issues](https://img.shields.io/github/issues-raw/valeryan/vscode-phpsab)
+![Current Version](https://img.shields.io/visual-studio-marketplace/v/ultrafastwork.vscode-phpcs-phpcbf)
+![Installs](https://img.shields.io/visual-studio-marketplace/i/ultrafastwork.vscode-phpcs-phpcbf)
+![GitHub issues](https://img.shields.io/github/issues-raw/ultrafastwork/vscode-phpcs-phpcbf)
 
 Integrates [phpcs & phpcbf](https://github.com/squizlabs/PHP_CodeSniffer.git) into [Visual Studio Code](https://code.visualstudio.com/).
 
@@ -17,13 +17,13 @@ This extension is designed to use an auto config search functionality. When it f
 
 ## Run/Debug Development Version
 
-To run the development version of the `vscode-phpsab` extension:
+To run the development version of the `vscode-phpcs-phpcbf` extension:
 
 -   open the cloned repository folder using [Visual Studio Code](https://code.visualstudio.com/)
 -   select sidebar option `Debug`
 -   press `Start Debugging` button or hit F5
 
-This will launch a new VS Code window named `Extension Development Host`, automatically using the development version of the `vscode-phpsab` extension.
+This will launch a new VS Code window named `Extension Development Host`, automatically using the development version of the `vscode-phpcs-phpcbf` extension.
 
 ## Installing the Development Version
 

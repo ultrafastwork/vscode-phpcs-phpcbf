@@ -256,7 +256,7 @@ const validate = async (document: TextDocument) => {
     });
   });
 
-  window.setStatusBarMessage('PHP Sniffer: validating…', done);
+  window.setStatusBarMessage('PHP Code Sniffer: validating…', done);
   logger.endTimer('Sniffer');
 };
 

@@ -1,13 +1,13 @@
-# PHP Sniffer & Beautifier for VS Code
+# PHP Code Sniffer & Beautifier for VS Code
 
-![Current Version](https://img.shields.io/open-vsx/v/ValeryanM/vscode-phpsab?label=version)
+![Current Version](https://img.shields.io/open-vsx/v/ultrafastwork/vscode-phpcs-phpcbf?label=version)
 ![VS Marketplace Installs](https://img.shields.io/badge/VS_Marketplace_Installs-~300k-brightgreen)
-![Open VSX Registry Installs](https://img.shields.io/open-vsx/dt/ValeryanM/vscode-phpsab?label=VSX%20Installs)
-![GitHub issues](https://img.shields.io/github/issues-raw/valeryan/vscode-phpsab)
+![Open VSX Registry Installs](https://img.shields.io/open-vsx/dt/ultrafastwork/vscode-phpcs-phpcbf?label=VSX%20Installs)
+![GitHub issues](https://img.shields.io/github/issues-raw/ultrafastwork/vscode-phpcs-phpcbf)
 
 This linter plugin for [Visual Studio Code](https://code.visualstudio.com/) provides an interface to [phpcs & phpcbf](https://github.com/PHPCSStandards/PHP_CodeSniffer). It will be used with files that have the “PHP” language mode. This extension is designed to use auto configuration search mechanism to apply rulesets to files within a workspace. This is useful for developers who work with many different projects that have different coding standards.
 
-This extension is available on both [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=ValeryanM.vscode-phpsab) and [Open VSX Registry](https://open-vsx.org/extension/ValeryanM/vscode-phpsab).
+This extension is available on both [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=ultrafastwork.vscode-phpcs-phpcbf) and [Open VSX Registry](https://open-vsx.org/extension/ultrafastwork/vscode-phpcs-phpcbf).
 
 <details open>
 <summary><b>Table of Contents</b></summary>
@@ -112,7 +112,7 @@ A global composer setup is required:
 
 Before using this plugin, you must ensure that `phpcs` is installed on your system. The preferred method is using [composer](https://getcomposer.org/) for both system-wide and project-wide installations.
 
-Once phpcs is installed, you can proceed to install the vscode-phpsab plugin if it is not yet installed.
+Once phpcs is installed, you can proceed to install the vscode-phpcs-phpcbf plugin if it is not yet installed.
 
 > **NOTE:** This plugin can detect whether your project has been set up to use phpcbf via composer and use the project specific `phpcs & phpcbf` over the system-wide installation of `phpcs & phpcbf` automatically. This feature requires that both composer.json and composer.lock file exist in your workspace root or the `phpsab.composerJsonPath` in order to check for the composer dependency. If you wish to bypass this feature you can set the `phpsab.executablePathCS` and `phpsab.executablePathCBF` configuration settings.
 
@@ -150,7 +150,7 @@ The `phpcs` linter can be installed in your project using the Composer Dependenc
 1. Press <kbd>Enter</kbd> or click the cloud icon to install it.
 1. Restart Visual Studio Code!
 
-This extension is available on both [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=ValeryanM.vscode-phpsab) and [Open VSX Registry](https://open-vsx.org/extension/ValeryanM/vscode-phpsab).
+This extension is available on both [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=ultrafastwork.vscode-phpcs-phpcbf) and [Open VSX Registry](https://open-vsx.org/extension/ultrafastwork/vscode-phpcs-phpcbf).
 
 ### Docker support
 
@@ -480,7 +480,7 @@ This is useful for excluding third-party libraries, dependencies, and intellisen
 
 [ *Scope:* All | Optional | *Type:* boolean | Default: false ]
 
-Write debug information to the `PHP Sniffer & Beautifier` output channel and enable the display of extra notices.
+Write debug information to the `PHP Code Sniffer & Beautifier` output channel and enable the display of extra notices.
 
 ### The phpcs report contains invalid json
 
@@ -494,7 +494,7 @@ This extension is based off of the `phpcs` extension created by [Ioannis Kappas]
 
 ## Contributing and Licensing
 
-The project is hosted on [GitHub](https://github.com/valeryan/vscode-phpsab) where you can [report issues](https://github.com/valeryan/vscode-phpsab/issues), fork
-the project and submit pull requests. See the [development guide](https://github.com/valeryan/vscode-phpsab/blob/main/DEVELOPMENT.md) for details.
+The project is hosted on [GitHub](https://github.com/ultrafastwork/vscode-phpcs-phpcbf) where you can [report issues](https://github.com/ultrafastwork/vscode-phpcs-phpcbf/issues), fork
+the project and submit pull requests. See the [development guide](https://github.com/ultrafastwork/vscode-phpcs-phpcbf/blob/main/DEVELOPMENT.md) for details.
 
-The project is available under [MIT license](https://github.com/valeryan/vscode-phpsab/blob/main/LICENSE.md), which allows modification and redistribution for both commercial and non-commercial purposes.
+The project is available under [MIT license](https://github.com/ultrafastwork/vscode-phpcs-phpcbf/blob/main/LICENSE.md), which allows modification and redistribution for both commercial and non-commercial purposes.

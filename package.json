@@ -1,18 +1,18 @@
 {
-  "name": "vscode-phpsab",
-  "displayName": "PHP Sniffer & Beautifier",
-  "description": "PHP Sniffer & Beautifier for Visual Studio Code",
+  "name": "vscode-phpcs-phpcbf",
+  "displayName": "PHP Code Sniffer & Beautifier",
+  "description": "PHP Code Sniffer & Beautifier for Visual Studio Code",
   "version": "0.0.26",
   "icon": "php_logo.png",
-  "publisher": "valeryanm",
-  "homepage": "https://github.com/valeryan/vscode-phpsab",
+  "publisher": "ultrafastwork",
+  "homepage": "https://github.com/ultrafastwork/vscode-phpcs-phpcbf",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/valeryan/vscode-phpsab.git"
+    "url": "https://github.com/ultrafastwork/vscode-phpcs-phpcbf.git"
   },
   "bugs": {
-    "url": "https://github.com/valeryan/vscode-phpsab/issues"
+    "url": "https://github.com/ultrafastwork/vscode-phpcs-phpcbf/issues"
   },
   "engines": {
     "vscode": "^1.106.1"
@@ -42,7 +42,7 @@
       }
     ],
     "configuration": {
-      "title": "PHP Sniffer & Fixer Configuration options",
+      "title": "PHP Code Sniffer & Fixer Configuration options",
       "type": "object",
       "properties": {
         "phpsab.fixerEnable": {
