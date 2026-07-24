@@ -9,10 +9,7 @@
     "sourceMap": true,
     "strict": true,
     "rootDir": "src",
-    "baseUrl": "./",
-    "paths": {
-      "@phpsab/*": ["src/*"]
-    },
+    "types": ["node", "mocha"],
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,

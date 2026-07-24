@@ -1,7 +1,6 @@
 import { FlatCompat } from '@eslint/eslintrc';
 import js from '@eslint/js';
-import typescriptEslint from '@typescript-eslint/eslint-plugin';
-import tsParser from '@typescript-eslint/parser';
+import babelParser from '@babel/eslint-parser';
 import prettier from 'eslint-plugin-prettier';
 import { defineConfig, globalIgnores } from 'eslint/config';
 import path from 'node:path';
@@ -21,13 +20,18 @@ export default defineConfig([
         extends: compat.extends('plugin:prettier/recommended'),
 
         plugins: {
-            '@typescript-eslint': typescriptEslint,
             prettier,
         },
 
         languageOptions: {
-            parser: tsParser,
-            ecmaVersion: 6,
+            parser: babelParser,
+            parserOptions: {
+                requireConfigFile: false,
+                babelOptions: {
+                    presets: ['@babel/preset-typescript'],
+                },
+            },
+            ecmaVersion: 'latest',
             sourceType: 'module',
         },
 
