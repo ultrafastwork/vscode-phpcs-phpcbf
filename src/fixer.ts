@@ -24,7 +24,6 @@ import { addWindowsEnoentError } from './utils/error-handling/windows-enoent-err
 import {
   constructCommandString,
   getArgs,
-  getEOL,
   parseArgs,
   shouldProcess,
 } from './utils/helpers';
@@ -158,15 +157,6 @@ const format = async (document: TextDocument, fullDocument: boolean) => {
 
   logger.info(`FIXER EXIT CODE: ${exitcode}`);
 
-  // We only log STDOUT if it starts with ERROR (3.x versions of phpcbf output "ERROR"
-  // messages to stdout), as otherwise it could be the whole file contents,
-  // which clutters the log when debugging.
-  //
-  // This will be removed once we require phpcbf 4.x, which outputs errors to STDERR.
-  if (stdout && (stdout.startsWith('ERROR') || stdout.startsWith(getEOL()))) {
-    logger.info(`FIXER STDOUT: ${stdout.trim()}`);
-  }
-
   if (stderr) {
     logger.error(`FIXER STDERR: ${stderr.trim()}`);
   }
@@ -174,11 +164,8 @@ const format = async (document: TextDocument, fullDocument: boolean) => {
   let fixed = stdout;
 
   let errors: { [key: number]: string } = {
-    3: 'FIXER: A general script execution error occurred.',
-    16: 'FIXER: Configuration error of the application.',
-    32: 'FIXER: Configuration error of a Fixer.',
-    64: 'FIXER: Exception raised within the application.',
-    255: 'FIXER: A Fatal execution error occurred.',
+    16: 'FIXER: A processing error occurred.',
+    64: 'FIXER: Requirements for running not met.',
   };
 
   let error: string = '';
@@ -199,11 +186,16 @@ const format = async (document: TextDocument, fullDocument: boolean) => {
   }
 
   /**
-   * fixer exit codes:
-   * Exit code 0 is used to indicate that no fixable errors were found, so nothing was fixed
-   * Exit code 1 is used to indicate that all fixable errors were fixed correctly
-   * Exit code 2 is used to indicate that FIXER failed to fix some of the fixable errors it found
-   * Exit code 3 is used for general script execution errors
+   * PHPCBF 4.x exit codes (cumulative):
+   * 0  = clean / all fixable issues fixed with no issues remaining
+   * 1  = auto-fixable issues found/remaining
+   * 2  = non-auto-fixable issues found/remaining
+   * 3  = 1 + 2
+   * 4  = fixer conflict / failed to fix some files
+   * 5  = 1 + 4
+   * 7  = 1 + 2 + 4
+   * 16 = processing error
+   * 64 = requirements for running not met
    */
   switch (exitcode) {
     case null: {
@@ -219,41 +211,21 @@ const format = async (document: TextDocument, fullDocument: boolean) => {
       break;
     }
     case 0:
-    case 1: {
-      // No fixable errors were found; OR
-      // all errors were fixed successfully.
-
-      // If stdout has valid fixed output (and doesn't contain error messages),
-      // then this exit code indicates that all fixable errors were fixed.
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+    case 5:
+    case 7: {
       if (hasValidFixedOutput(stdout, fileText)) {
         result = fixed;
-        message = 'All fixable errors were fixed correctly.';
-      }
-      // If Node errors.
-      else if (nodeError) {
+        message = 'Fixes applied (some issues may remain).';
+      } else if (nodeError) {
         // Destructure the returned object and assign to variables.
         ({ errorMsg, extraLoggerMsg } = determineNodeError(nodeError, 'fixer'));
         error += errorMsg;
-      }
-      // Otherwise, there were no fixable errors found.
-      else {
-        message = 'No fixable errors were found.';
-      }
-
-      break;
-    }
-    case 2: {
-      // If stdout has valid fixed output (and doesn't contain error messages),
-      // then this exit code indicates that some fixable errors failed to be fixed.
-      if (hasValidFixedOutput(stdout, fileText)) {
-        result = fixed;
-        message = 'FIXER failed to fix some of the fixable errors.';
-      }
-      // If Node errors.
-      else if (nodeError) {
-        // Destructure the returned object and assign to variables.
-        ({ errorMsg, extraLoggerMsg } = determineNodeError(nodeError, 'fixer'));
-        error += errorMsg;
+      } else {
+        message = 'No fixable issues were found.';
       }
 
       break;
@@ -266,21 +238,10 @@ const format = async (document: TextDocument, fullDocument: boolean) => {
       if (fixed.length > 0) {
         error += '\n' + fixed + '\n';
       }
-      // Other errors.
-      else {
-        // If Node errors.
-        if (nodeError) {
-          // Destructure the returned object and assign to variables.
-          ({ errorMsg, extraLoggerMsg } = determineNodeError(
-            nodeError,
-            'fixer',
-          ));
-          error += errorMsg;
-        }
-        // If no specific error is found, return a generic fatal error.
-        else {
-          error += 'FATAL: Unknown error occurred.';
-        }
+      if (nodeError) {
+        // Destructure the returned object and assign to variables.
+        ({ errorMsg, extraLoggerMsg } = determineNodeError(nodeError, 'fixer'));
+        error += errorMsg;
       }
   }
 
@@ -314,11 +275,7 @@ const hasValidFixedOutput = (
   stdout: string,
   originalFileText: string,
 ): boolean => {
-  return (
-    stdout.length > 0 &&
-    stdout !== originalFileText &&
-    !stdout.startsWith(getEOL())
-  );
+  return stdout.length > 0 && stdout !== originalFileText;
 };
 
 /**

@@ -274,7 +274,7 @@ const getSettings = async (
 };
 
 /**
- * Check PHPCS version compatibility and warn on 4.x versions.
+ * Check PHPCS version compatibility and warn on unsupported versions.
  * @param {Settings} settings The extension settings
  * @return {Promise<void>}
  */
@@ -325,13 +325,13 @@ const checkPhpcsVersionCompatibility = async (
     else if (phpcsVersion && phpcbfVersion && phpcsVersion !== phpcbfVersion) {
       warningMsg = `Version mismatch detected: PHPCS version ${phpcsVersion} and PHPCBF version ${phpcbfVersion} from "${resourceRoot}". This may lead to unexpected behavior. Please ensure both are from the same installation directory.`;
     }
-    // Check for unsupported 4.x versions
+    // Check for unsupported versions (< 4.x)
     else if (
-      (phpcsVersion && phpcsVersion.startsWith('4.')) ||
-      (phpcbfVersion && phpcbfVersion.startsWith('4.'))
+      (phpcsVersion && parseInt(phpcsVersion.split('.')[0], 10) < 4) ||
+      (phpcbfVersion && parseInt(phpcbfVersion.split('.')[0], 10) < 4)
     ) {
       const version = phpcsVersion || phpcbfVersion;
-      warningMsg = `Version ${version} detected in "${resourceRoot}". Version 4.x is not supported yet. Some features may not work as expected. Please consider downgrading to the latest 3.x version.`;
+      warningMsg = `Version ${version} detected in "${resourceRoot}". This extension requires PHP_CodeSniffer/PHPCBF 4.0.0 or higher.`;
     }
 
     // Only show warning if there's a message to display.
