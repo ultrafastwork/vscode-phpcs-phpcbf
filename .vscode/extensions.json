@@ -1,6 +1,7 @@
 {
   "recommendations": [
-    "dbaeumer.vscode-eslint",
+    "biomejs.biome",
+    "DavidAnson.vscode-markdownlint",
     "bmewburn.vscode-intelephense-client",
     "mehedidracula.php-namespace-resolver",
     "neilbrayfield.php-docblocker",

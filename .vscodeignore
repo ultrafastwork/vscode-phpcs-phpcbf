@@ -4,7 +4,13 @@ src/**
 .gitignore
 .yarnrc
 **/tsconfig.json
-**/.eslintrc.json
+biome.json
+.markdownlint-cli2.jsonc
+pnpm-lock.yaml
+pnpm-workspace.yaml
+.github/**
+AGENTS.md
+DEVELOPMENT.md
 **/*.map
 **/*.ts
 **/.vscode-test.*

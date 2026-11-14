@@ -1,4 +1,7 @@
-import { PathResolver, PathResolverOptions } from '../interfaces/path-resolver';
+import type {
+  PathResolver,
+  PathResolverOptions,
+} from '../interfaces/path-resolver';
 import { createComposerPathResolver } from './composer-path-resolver';
 import { createGlobalPathResolver } from './global-path-resolver';
 import {

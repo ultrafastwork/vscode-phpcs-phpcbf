@@ -1,20 +1,25 @@
-import { minimatch } from 'minimatch';
 import os from 'node:os';
 import path from 'node:path';
-import { ExtensionContext, extensions, TextDocument, window } from 'vscode';
+import { minimatch } from 'minimatch';
+import {
+  type ExtensionContext,
+  extensions,
+  type TextDocument,
+  window,
+} from 'vscode';
 import type {
   PHPCSAdditionalArgumentKey,
   PHPCSInternalArgumentKey,
 } from '../interfaces/arguments';
 import {
-  PHPCSArgumentValidation,
+  type PHPCSArgumentValidation,
   validAdditionalArguments,
   validAdditionalFlagArguments,
   validAdditionalValueArguments,
   validInternalArguments,
 } from '../interfaces/arguments';
-import { ExtensionInfo } from '../interfaces/extensionInfo';
-import { ResourceSettings } from '../interfaces/settings';
+import type { ExtensionInfo } from '../interfaces/extensionInfo';
+import type { ResourceSettings } from '../interfaces/settings';
 import { logger } from '../logger';
 import { isPathValid, isWin } from '../resolvers/path-resolver-utils';
 
@@ -392,7 +397,7 @@ const validateIgnoreValue = (value: string): boolean => {
 
   // Regex to validate each glob pattern. They must only contain
   // standard path characters, spaces, and wildcards.
-  const globRegex = /^[a-zA-Z0-9.*/_\\:?\[\]() -]+$/;
+  const globRegex = /^[a-zA-Z0-9.*/_\\:?[\]() -]+$/;
 
   // Check that there are patterns to validate (ensuring the value is not empty) and
   // then validate that each pattern matches the glob regex to catch obvious errors.
@@ -557,4 +562,23 @@ const matchesExcludePatterns = (
   }
 
   return false;
+};
+
+/**
+ * Creates a debounced function that delays invoking `fn` until `wait`
+ * milliseconds have elapsed since the last time it was invoked.
+ *
+ * @param {Function} fn - The function to debounce.
+ * @param {number} wait - The number of milliseconds to delay.
+ * @returns {Function} The debounced function.
+ */
+export const debounce = <Args extends unknown[]>(
+  fn: (...args: Args) => void,
+  wait: number,
+): ((...args: Args) => void) => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return (...args: Args): void => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), wait);
+  };
 };

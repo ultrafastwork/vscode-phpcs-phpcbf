@@ -1,4 +1,4 @@
-import assert from 'assert';
+import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import sinon from 'sinon';

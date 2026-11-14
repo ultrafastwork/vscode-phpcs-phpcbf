@@ -1,0 +1,28 @@
+// markdownlint rules: https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+{
+  "config": {
+    "default": false,
+    // Space between heading hash and heading text
+    "MD018": true,
+    // No multiple spaces between heading hash and heading text
+    "MD019": true,
+    // No duplicate sibling headings (changelog sections repeat per release)
+    "MD024": { "siblings_only": true },
+    // Ordered list item prefixes increment
+    "MD029": { "style": "ordered" },
+    // Space after list markers
+    "MD030": true,
+    // Fenced code blocks only
+    "MD046": { "style": "fenced" },
+    // Backtick code fences
+    "MD048": { "style": "backtick" },
+    // Asterisks for emphasis
+    "MD049": { "style": "asterisk" },
+    // Asterisks for strong emphasis
+    "MD050": { "style": "asterisk" },
+    // Descriptive link text
+    "MD059": true
+  },
+  "globs": ["**/*.md"],
+  "ignores": ["node_modules", "out", "dist", ".vscode-test"]
+}

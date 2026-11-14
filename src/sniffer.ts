@@ -1,24 +1,23 @@
-import { debounce } from 'lodash';
-import { spawn, SpawnOptions } from 'node:child_process';
+import { type SpawnOptions, spawn } from 'node:child_process';
 import {
   CancellationTokenSource,
-  ConfigurationChangeEvent,
+  type ConfigurationChangeEvent,
   Diagnostic,
-  DiagnosticCollection,
+  type DiagnosticCollection,
   DiagnosticSeverity,
-  Disposable,
+  type Disposable,
   languages,
   Range,
-  TextDocument,
-  TextDocumentChangeEvent,
-  Uri,
+  type TextDocument,
+  type TextDocumentChangeEvent,
+  type Uri,
   window,
   workspace,
 } from 'vscode';
-import { OriginalCommand } from './interfaces/common';
-import { ConsoleError } from './interfaces/console-error';
-import { PHPCSMessageType, PHPCSReport } from './interfaces/phpcs-report';
-import { Settings, SnifferMode } from './interfaces/settings';
+import type { OriginalCommand } from './interfaces/common';
+import type { ConsoleError } from './interfaces/console-error';
+import { PHPCSMessageType, type PHPCSReport } from './interfaces/phpcs-report';
+import type { Settings, SnifferMode } from './interfaces/settings';
 import { logger } from './logger';
 import { createStandardsPathResolver } from './resolvers/standards-path-resolver';
 import { loadSettings } from './settings';
@@ -29,6 +28,7 @@ import {
 import { addWindowsEnoentError } from './utils/error-handling/windows-enoent-error';
 import {
   constructCommandString,
+  debounce,
   getArgs,
   parseArgs,
   shouldProcess,
@@ -110,7 +110,7 @@ const validate = async (document: TextDocument): Promise<void> => {
     'sniffer',
   );
 
-  let fileText = document.getText();
+  const fileText = document.getText();
 
   const options: SpawnOptions = {
     cwd:

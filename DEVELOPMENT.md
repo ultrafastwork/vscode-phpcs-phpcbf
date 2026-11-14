@@ -11,7 +11,8 @@ This extension is designed to use an auto config search functionality. When it f
 ## Setup Development Version
 
 - Install the VS Code [npm extension](https://marketplace.visualstudio.com/items?itemName=eg2.vscode-npm-script)
-- Install the VS Code [ESLint extension](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) (for linting and auto-fixing code)
+- Install the VS Code [Biome extension](https://marketplace.visualstudio.com/items?itemName=biomejs.biome) (for linting and formatting code)
+- Install the VS Code [markdownlint extension](https://marketplace.visualstudio.com/items?itemName=DavidAnson.vscode-markdownlint) (for linting Markdown files)
 - Clone this repository and checkout `develop` branch
 - Open the cloned repository folder using VS Code
 - Install the dependencies using `pnpm install`

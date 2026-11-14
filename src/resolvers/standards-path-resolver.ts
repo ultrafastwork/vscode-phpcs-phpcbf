@@ -1,9 +1,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { TextDocument, window, workspace } from 'vscode';
-import { ConsoleError } from '../interfaces/console-error';
-import { PathResolver } from '../interfaces/path-resolver';
-import { ResourceSettings } from '../interfaces/settings';
+import { type TextDocument, window, workspace } from 'vscode';
+import type { ConsoleError } from '../interfaces/console-error';
+import type { PathResolver } from '../interfaces/path-resolver';
+import type { ResourceSettings } from '../interfaces/settings';
 import { logger } from '../logger';
 import { isSingleFileMode } from '../settings';
 import { getErrorCodeDescription } from '../utils/error-handling/error-helpers';
@@ -32,10 +32,10 @@ export const createStandardsPathResolver = (
     extension,
     pathSeparator,
     resolve: async (): Promise<string> => {
-      let errors: any = {};
+      const errors: any = {};
       // `standard` may be a comma-separated list, so trim, expand `~`,
       // and normalize each entry individually.
-      let configured = (config.standard ?? '')
+      const configured = (config.standard ?? '')
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean)
@@ -64,20 +64,20 @@ export const createStandardsPathResolver = (
 
       // If no workspace folder found, set error and skip auto search
       if (!folder) {
-        errors['NO_WORKSPACE'] = {
+        errors.NO_WORKSPACE = {
           errorCodeDescription: 'No workspace folder found for the document.',
           paths: [resource.fsPath],
         };
       }
       // Otherwise, perform auto ruleset search.
       else {
-        let workspaceRoot = folder.uri.fsPath + pathSeparator;
-        let localPath = resource.fsPath.replace(workspaceRoot, '');
-        let paths = localPath
+        const workspaceRoot = folder.uri.fsPath + pathSeparator;
+        const localPath = resource.fsPath.replace(workspaceRoot, '');
+        const paths = localPath
           .split(pathSeparator)
           .filter((path) => path.includes('.php') !== true);
 
-        let searchPaths = [];
+        const searchPaths = [];
 
         // Create search paths based on file location
         for (let i = 0, len = paths.length; i < len; i++) {
@@ -89,11 +89,11 @@ export const createStandardsPathResolver = (
         searchPaths.push(workspaceRoot);
 
         // Check each search path for an allowed ruleset
-        let allowed = config.allowedAutoRulesets;
+        const allowed = config.allowedAutoRulesets;
 
-        let files: string[] = [];
+        const files: string[] = [];
 
-        searchPaths.map((path) => {
+        searchPaths.forEach((path) => {
           allowed.forEach((file) => {
             files.push(path + file);
           });
@@ -102,13 +102,14 @@ export const createStandardsPathResolver = (
         logger.debug('Standards Search paths: ', searchPaths);
 
         for (let i = 0, len = files.length; i < len; i++) {
-          let c = files[i];
+          const c = files[i];
           try {
             await fs.access(c, fs.constants.R_OK | fs.constants.W_OK);
 
             logger.info(`Using the found coding standard ruleset: "${c}"`);
 
-            return (resolvedPath = c);
+            resolvedPath = c;
+            return resolvedPath;
           } catch (err) {
             const error: ConsoleError = err as ConsoleError;
             const errorCode = error.code ?? 'UNKNOWN';
@@ -123,8 +124,6 @@ export const createStandardsPathResolver = (
             }
             // Store the path.
             errors[errorCode].paths.push(error.path);
-
-            continue;
           }
         }
       }

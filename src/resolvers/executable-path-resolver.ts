@@ -1,6 +1,6 @@
 import path from 'node:path';
-import { WorkspaceConfiguration } from 'vscode';
-import { ResourceSettings } from '../interfaces/settings';
+import type { WorkspaceConfiguration } from 'vscode';
+import type { ResourceSettings } from '../interfaces/settings';
 import { logger } from '../logger';
 import { createPathResolver } from './path-resolver';
 import {
@@ -19,7 +19,7 @@ export const resolveCBFExecutablePath = async (
 ): Promise<ResourceSettings> => {
   // If no path is set, try and find it via the path resolver.
   if (!settings.executablePathCBF) {
-    let executablePathResolver = createPathResolver(settings, 'phpcbf');
+    const executablePathResolver = createPathResolver(settings, 'phpcbf');
     settings.executablePathCBF = await executablePathResolver.resolve();
   } else {
     settings.executablePathCBF = expandHomeDir(settings.executablePathCBF);
@@ -53,7 +53,7 @@ export const resolveCSExecutablePath = async (
 ): Promise<ResourceSettings> => {
   // If no path is set, try and find it via the path resolver.
   if (!settings.executablePathCS) {
-    let executablePathResolver = createPathResolver(settings, 'phpcs');
+    const executablePathResolver = createPathResolver(settings, 'phpcs');
     settings.executablePathCS = await executablePathResolver.resolve();
   } else {
     settings.executablePathCS = expandHomeDir(settings.executablePathCS);

@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { window } from 'vscode';
-import { Settings } from './interfaces/settings';
+import type { Settings } from './interfaces/settings';
 import { logger } from './logger';
 
 /**

@@ -1,5 +1,5 @@
 import { getSystemErrorMap } from 'node:util';
-import { ConsoleError } from '../../interfaces/console-error';
+import type { ConsoleError } from '../../interfaces/console-error';
 
 /**
  * Determine the Node error and return a formatted string of the error message(s) and stack trace.

@@ -15,9 +15,9 @@
  * https://github.com/moxystudio/node-cross-spawn
  */
 
-import { ChildProcess, SpawnSyncReturns } from 'node:child_process';
+import type { ChildProcess, SpawnSyncReturns } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { OriginalCommand } from '../../interfaces/common';
+import type { OriginalCommand } from '../../interfaces/common';
 import { logger } from '../../logger';
 import { isWin } from '../../resolvers/path-resolver-utils';
 
@@ -60,7 +60,7 @@ function hookIntoEmit(cp: ChildProcess, originalCommand: OriginalCommand) {
   const originalEmit = cp.emit.bind(cp);
 
   // Override emit method with custom logic to handle "exit" events
-  cp.emit = function (name: string, ...args: any[]) {
+  cp.emit = ((name: string, ...args: any[]) => {
     // If emitting "exit" event...
     if (name === 'exit') {
       // Verify if it is indeed an ENOENT error.
@@ -75,7 +75,7 @@ function hookIntoEmit(cp: ChildProcess, originalCommand: OriginalCommand) {
 
     // For all other events, just call the original emit method.
     return originalEmit(name, ...args);
-  } as any;
+  }) as any;
 }
 
 /**

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { PathResolver } from '../interfaces/path-resolver';
+import type { PathResolver } from '../interfaces/path-resolver';
 import {
   executableExists,
   getEnvPathSeparator,
@@ -19,12 +19,12 @@ export const createGlobalPathResolver = (executable: string): PathResolver => {
     extension,
     pathSeparator,
     resolve: async (): Promise<string> => {
-      let envSeparator = getEnvPathSeparator();
+      const envSeparator = getEnvPathSeparator();
       let resolvedPath: string = '';
       const envPath = process.env.PATH || '';
-      let globalPaths: string[] = envPath.split(envSeparator);
+      const globalPaths: string[] = envPath.split(envSeparator);
       for (const globalPath of globalPaths) {
-        let testPath = path.join(globalPath, executable);
+        const testPath = path.join(globalPath, executable);
 
         if (await executableExists(testPath)) {
           resolvedPath = testPath;

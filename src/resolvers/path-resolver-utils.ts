@@ -169,7 +169,7 @@ export const executableExists = async (path: string): Promise<boolean> => {
     }
     await fs.access(path, fs.constants.X_OK);
     return true;
-  } catch (error) {
+  } catch {
     return false;
   }
 };

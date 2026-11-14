@@ -1,18 +1,18 @@
-import { spawnSync, SpawnSyncOptions } from 'node:child_process';
+import { type SpawnSyncOptions, spawnSync } from 'node:child_process';
 import {
-  ConfigurationChangeEvent,
-  Disposable,
+  type ConfigurationChangeEvent,
+  type Disposable,
   Position,
-  ProviderResult,
+  type ProviderResult,
   Range,
-  TextDocument,
+  type TextDocument,
   TextEdit,
   window,
   workspace,
 } from 'vscode';
-import { OriginalCommand } from './interfaces/common';
-import { ConsoleError } from './interfaces/console-error';
-import { Settings } from './interfaces/settings';
+import type { OriginalCommand } from './interfaces/common';
+import type { ConsoleError } from './interfaces/console-error';
+import type { Settings } from './interfaces/settings';
 import { logger } from './logger';
 import { createStandardsPathResolver } from './resolvers/standards-path-resolver';
 import { loadSettings } from './settings';
@@ -86,7 +86,7 @@ const isFullDocumentRange = (range: Range, document: TextDocument): boolean =>
  */
 const format = async (
   document: TextDocument,
-  fullDocument: boolean,
+  _fullDocument: boolean,
 ): Promise<string> => {
   const settings = await getSettings();
   const workspaceFolder = workspace.getWorkspaceFolder(document.uri);
@@ -132,7 +132,7 @@ const format = async (
     'fixer',
   );
 
-  let fileText = document.getText();
+  const fileText = document.getText();
 
   const options: SpawnSyncOptions = {
     cwd:
@@ -177,9 +177,9 @@ const format = async (
     logger.error(`FIXER STDERR: ${stderr.trim()}`);
   }
 
-  let fixed = stdout;
+  const fixed = stdout;
 
-  let errors: { [key: number]: string } = {
+  const errors: { [key: number]: string } = {
     16: 'FIXER: A processing error occurred.',
     64: 'FIXER: Requirements for running not met.',
   };
@@ -252,7 +252,7 @@ const format = async (
         errors[exitcode] ||
         `FIXER: An unknown error occurred with exit code ${exitcode}.`;
       if (fixed.length > 0) {
-        error += '\n' + fixed + '\n';
+        error += `\n${fixed}\n`;
       }
       if (nodeError) {
         // Destructure the returned object and assign to variables.

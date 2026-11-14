@@ -54,22 +54,25 @@ jobs:
             exit 1
           fi
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
           node-version: 22.x
-          cache: "npm"
+          cache: "pnpm"
 
       - name: Install Dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Lint and Test
         run: |
-          npm run lint
-          xvfb-run npm test
+          pnpm run lint
+          xvfb-run pnpm test
 
       - name: Build Extension
-        run: npm run vscode:prepublish
+        run: pnpm run vscode:prepublish
 
       - name: Verify Build Output
         run: |
@@ -96,14 +99,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
           node-version: 22.x
-          cache: "npm"
+          cache: "pnpm"
 
       - name: Install Dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Update Package Version
         run: |
@@ -145,7 +151,7 @@ jobs:
       - name: Commit and Push All Changes
         if: steps.git-check.outputs.changes == 'true'
         run: |
-          git add package.json package-lock.json CHANGELOG.md
+          git add package.json CHANGELOG.md
           git commit -m "chore: release ${{ env.TAG_NAME }}
 
           - Update version to ${{ needs.validate-and-build.outputs.version }}
@@ -179,11 +185,14 @@ jobs:
           ref: ${{ github.event_name == 'release' && env.TARGET_BRANCH || github.ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
           node-version: 22.x
-          cache: "npm"
+          cache: "pnpm"
 
       - name: Check VS Marketplace Token Expiration Date
         run: |
@@ -229,12 +238,12 @@ jobs:
           fi
 
       - name: Install Dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       # Release builds are already validated/built in validate-and-build; manual dispatch skips that job.
       - name: Build Extension
         if: github.event_name == 'workflow_dispatch'
-        run: npm run vscode:prepublish
+        run: pnpm run vscode:prepublish
 
       - name: Verify Build Output
         if: github.event_name == 'workflow_dispatch'

@@ -3,7 +3,7 @@
  * Used by the publish workflow
  */
 
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 export default async ({ github, context, core }) => {
   try {
@@ -19,7 +19,7 @@ export default async ({ github, context, core }) => {
     let changelog = '';
     try {
       changelog = readFileSync(changelogPath, 'utf8');
-    } catch (error) {
+    } catch {
       console.log('CHANGELOG.md not found, creating new one');
       changelog = '# Changelog\n\n';
     }
@@ -29,7 +29,10 @@ export default async ({ github, context, core }) => {
     const today = new Date().toISOString().split('T')[0];
 
     // Check for duplicate version
-    const versionPattern = new RegExp(`^## \\[${version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`, 'm');
+    const versionPattern = new RegExp(
+      `^## \\[${version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`,
+      'm',
+    );
     if (versionPattern.test(changelog)) {
       const errorMsg = `Version ${version} already exists in CHANGELOG.md. Please remove the duplicate entry or use a different version.`;
       console.error(`❌ ${errorMsg}`);

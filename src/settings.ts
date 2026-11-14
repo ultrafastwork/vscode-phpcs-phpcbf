@@ -1,6 +1,15 @@
-import { Uri, WorkspaceConfiguration, window, workspace } from 'vscode';
+import {
+  type Uri,
+  type WorkspaceConfiguration,
+  window,
+  workspace,
+} from 'vscode';
 import { checkPhpcsVersionCompatibility } from './compatibility';
-import { ResourceSettings, Settings, SnifferMode } from './interfaces/settings';
+import type {
+  ResourceSettings,
+  Settings,
+  SnifferMode,
+} from './interfaces/settings';
 import { logger } from './logger';
 import {
   resolveCBFExecutablePath,
@@ -29,7 +38,7 @@ export const isSingleFileMode = (): boolean => {
  */
 const resolveRootPath = (resource: Uri): string => {
   // Try to get a valid folder from resource
-  let folder = workspace.getWorkspaceFolder(resource);
+  const folder = workspace.getWorkspaceFolder(resource);
 
   // One last safety check
   return folder ? folder.uri.fsPath : '';
@@ -115,7 +124,7 @@ export const loadSettings = async (): Promise<Settings> => {
   }
 
   // Update settings from config
-  let settings: Settings = {
+  const settings: Settings = {
     resources: resourcesSettings,
     snifferMode: globalConfig.get<SnifferMode>('snifferMode', 'onSave'),
     snifferShowSources: globalConfig.get<boolean>('snifferShowSources', false),
@@ -128,7 +137,7 @@ export const loadSettings = async (): Promise<Settings> => {
     phpExecutablePath: await resolvePhpExecutablePath(globalConfig, PHPconfig),
   };
 
-  if (settings.phpExecutablePath != '') {
+  if (settings.phpExecutablePath !== '') {
     addPhpToEnvPath(settings.phpExecutablePath);
   }
 

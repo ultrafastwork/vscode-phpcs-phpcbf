@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { PathResolver } from '../interfaces/path-resolver';
+import type { PathResolver } from '../interfaces/path-resolver';
 import {
   expandHomeDir,
   getPlatformExtension,
@@ -19,20 +19,20 @@ const hasComposerDependency = async (
   try {
     const lockFile = await fs.readFile(composerLockPath, 'utf8');
     dependencies = JSON.parse(lockFile);
-  } catch (error) {
+  } catch {
     dependencies = {};
   }
 
-  let search = [];
+  const search = [];
   if (dependencies['packages-dev']) {
     search.push(dependencies['packages-dev']);
   }
-  if (dependencies['packages']) {
-    search.push(dependencies['packages']);
+  if (dependencies.packages) {
+    search.push(dependencies.packages);
   }
 
   return search.some((pkgs) => {
-    let match = pkgs.filter((pkg: any) => {
+    const match = pkgs.filter((pkg: any) => {
       return pkg.name === 'squizlabs/php_codesniffer';
     });
     return match.length !== 0;
@@ -49,32 +49,28 @@ const getVendorPath = async (
   composerJsonPath: string,
   executableFile: string,
 ): Promise<string> => {
-  let basePath = path.dirname(composerJsonPath);
+  const basePath = path.dirname(composerJsonPath);
   let vendorPath = path.join(basePath, 'vendor', 'bin', executableFile);
 
   let config = null;
   try {
     const composerFile = await fs.readFile(composerJsonPath, 'utf8');
     config = JSON.parse(composerFile);
-  } catch (error) {
+  } catch {
     config = {};
   }
 
-  if (config['config'] && config['config']['vendor-dir']) {
+  if (config.config?.['vendor-dir']) {
     vendorPath = path.join(
       basePath,
-      config['config']['vendor-dir'],
+      config.config['vendor-dir'],
       'bin',
       executableFile,
     );
   }
 
-  if (config['config'] && config['config']['bin-dir']) {
-    vendorPath = path.join(
-      basePath,
-      config['config']['bin-dir'],
-      executableFile,
-    );
+  if (config.config?.['bin-dir']) {
+    vendorPath = path.join(basePath, config.config['bin-dir'], executableFile);
   }
 
   return vendorPath;
@@ -115,7 +111,7 @@ export const createComposerPathResolver = (
         composerLockPath = await fs.realpath(
           path.join(fullWorkingPath, 'composer.lock'),
         );
-      } catch (error) {
+      } catch {
         return '';
       }
 
@@ -126,7 +122,7 @@ export const createComposerPathResolver = (
         try {
           fs.access(vendorPath, fs.constants.R_OK || fs.constants.W_OK);
           resolvedPath = vendorPath;
-        } catch (error) {
+        } catch {
           const relativeVendorPath = path.relative(workspaceRoot, vendorPath);
           throw new Error(
             `Composer phpcs dependency is configured but was not found under ${relativeVendorPath}. You may need to run "composer install" or set your executablePaths for phpcs & phpcbf manually.`,
