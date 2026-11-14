@@ -5,7 +5,7 @@ import { Settings } from './interfaces/settings';
 import { logger } from './logger';
 
 /**
- * Check PHPCS version compatibility and warn on 4.x versions.
+ * Check PHPCS version compatibility and warn on unsupported versions.
  * @param {Settings} settings The extension settings
  * @return {Promise<void>}
  */
@@ -59,7 +59,7 @@ export const checkPhpcsVersionCompatibility = async (
     // Check for unsupported versions
     else if (checkUnsupportedVersion(phpcsVersion, phpcbfVersion)) {
       const version = phpcsVersion || phpcbfVersion;
-      warningMsg = `Version ${version} detected in "${resourceRoot}". Version 4.x is not supported yet. Some features may not work as expected. Please consider downgrading to the latest 3.x version.`;
+      warningMsg = `Version ${version} detected in "${resourceRoot}". This extension requires PHP_CodeSniffer/PHPCBF 4.0.0 or higher.`;
     }
 
     // Only show warning if there's a message to display.
@@ -141,7 +141,7 @@ const getPhpcsVersion = async (
 };
 
 /**
- * Check if the given version is unsupported.
+ * Check if the given version is unsupported (older than the minimum major version).
  * @param {string | null} phpcsVersion The PHPCS version string to check.
  * @param {string | null} phpcbfVersion The PHPCBF version string to check.
  * @returns {boolean} `true` if the version is unsupported, `false` otherwise.
@@ -150,10 +150,11 @@ const checkUnsupportedVersion = (
   phpcsVersion: string | null,
   phpcbfVersion: string | null,
 ): boolean => {
-  const unsupportedVersion = '4.';
+  const minimumMajorVersion = 4;
 
-  return (
-    (phpcsVersion != null && phpcsVersion.startsWith(unsupportedVersion)) ||
-    (phpcbfVersion != null && phpcbfVersion.startsWith(unsupportedVersion))
-  );
+  const isBelowMinimum = (version: string | null): boolean =>
+    version != null &&
+    parseInt(version.split('.')[0], 10) < minimumMajorVersion;
+
+  return isBelowMinimum(phpcsVersion) || isBelowMinimum(phpcbfVersion);
 };
