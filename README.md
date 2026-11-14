@@ -1,7 +1,6 @@
 # PHP Code Sniffer & Beautifier for VS Code
 
 ![Current Version](https://img.shields.io/open-vsx/v/ultrafastwork/vscode-phpcs-phpcbf?label=version)
-![VS Marketplace Installs](https://img.shields.io/badge/VS_Marketplace_Installs-~300k-brightgreen)
 ![Open VSX Registry Installs](https://img.shields.io/open-vsx/dt/ultrafastwork/vscode-phpcs-phpcbf?label=VSX%20Installs)
 ![GitHub issues](https://img.shields.io/github/issues-raw/ultrafastwork/vscode-phpcs-phpcbf)
 
@@ -13,8 +12,9 @@ This extension is available on both [VS Code Marketplace](https://marketplace.vi
 <summary><b>Table of Contents</b></summary>
 
 - [PHPCS Version Support](#phpcs-version-support)
-- [Maintenance Status](#maintenance-status)
-    - [Active Maintainers](#active-maintainers)
+- [About This Fork](#about-this-fork)
+    - [Maintenance](#maintenance)
+    - [Credits](#credits)
 - [Installation](#installation)
 - [Usage](#usage)
     - [Format on save](#format-on-save)
@@ -57,17 +57,23 @@ This extension requires [PHP_CodeSniffer 4.0.0 or higher](https://github.com/PHP
 
 > **NOTE:** The extension will detect if PHPCS/PHPCBF version 3.x or lower is being used and will display an error message to the user.
 
-## Maintenance Status
+## About This Fork
 
-My focus has shifted away from PHP to .NET development, I'm currently unable to dedicate much time to maintaining this project. However, the extension is fully operational in its current state. If you're interested in contributing as a co-maintainer to address any outstanding issues, please feel free to get in touch with me.
+This extension is a fork of [PHP Sniffer & Beautifier (vscode-phpsab)](https://github.com/valeryan/vscode-phpsab), created by [Samuel Hilson](https://github.com/valeryan). It focuses on **modern PHP_CodeSniffer (4.x and newer)**, dropping support for older PHPCS versions so the extension can follow current PHPCS behavior without legacy workarounds.
 
-### Active Maintainers
+The `phpsab.*` setting names are kept unchanged, so existing configurations continue to work.
 
-In Sept of 2025 [yCodeTech](https://github.com/yCodeTech) was added as a maintainer.
+### Maintenance
 
-In June 2023 [jonathanbossenger](https://github.com/jonathanbossenger) reached out to me and offered to help with maintaining the extension. I have added him as a contributor and he will be monitoring new issues and helping me review PRs. I will still be around to help out if needed.
+This fork is maintained by [Bagus](https://github.com/contactjavas) at [ultrafastwork](https://github.com/ultrafastwork), with development assisted by AI coding agents. Bug reports and pull requests are welcome on the [issue tracker](https://github.com/ultrafastwork/vscode-phpcs-phpcbf/issues).
 
-In January 2024 [seebeen](https://github.com/seebeen) signed on to be a maintainer for this project and has been granted contributor status. (Currently Inactive)
+### Credits
+
+Huge thanks to the original author and the community who built and maintained vscode-phpsab, on which this extension is built:
+
+- [Samuel Hilson (valeryan)](https://github.com/valeryan): original author and maintainer.
+- [yCodeTech](https://github.com/yCodeTech), [Jonathan Bossenger](https://github.com/jonathanbossenger) and [seebeen](https://github.com/seebeen): maintainers of the original project.
+- Everyone who contributed code, reported issues and helped other users on the [original repository](https://github.com/valeryan/vscode-phpsab).
 
 ## Installation
 
@@ -144,7 +150,7 @@ The `phpcs` linter can be installed in your project using the Composer Dependenc
 
 1. Open Visual Studio Code.
 1. Press <kbd>Ctrl + P</kbd> on Windows or <kbd>Cmd + P</kbd> on Mac to open the Quick Open dialog.
-1. Type `ext install phpsab` to find the extension.
+1. Type `ext install ultrafastwork.vscode-phpcs-phpcbf` to find the extension.
 1. Press <kbd>Enter</kbd> or click the cloud icon to install it.
 1. Restart Visual Studio Code!
 
@@ -488,7 +494,7 @@ Execute the `phpcbf` command in your terminal with `--report=json` and see wheth
 
 ## Acknowledgements
 
-This extension is based off of the `phpcs` extension created by [Ioannis Kappas](https://github.com/ikappas/vscode-phpcs/), the `PHP Sniffer` extension create by [wongjn](https://github.com/wongjn/vscode-php-sniffer) and the existing `phpcbf` extension by [Per Søderlind](https://github.com/soderlind/vscode-phpcbf). It uses some portions of these extensions to provide the `phpcs & phpcbf` functionality with auto config search.
+This extension is a fork of [vscode-phpsab](https://github.com/valeryan/vscode-phpsab) by [Samuel Hilson](https://github.com/valeryan) (see [Credits](#credits)). vscode-phpsab itself is based off of the `phpcs` extension created by [Ioannis Kappas](https://github.com/ikappas/vscode-phpcs/), the `PHP Sniffer` extension create by [wongjn](https://github.com/wongjn/vscode-php-sniffer) and the existing `phpcbf` extension by [Per Søderlind](https://github.com/soderlind/vscode-phpcbf). It uses some portions of these extensions to provide the `phpcs & phpcbf` functionality with auto config search.
 
 ## Contributing and Licensing
 
