@@ -1,5 +1,63 @@
 # Changelog
 
+## [0.0.31] - 2026-10-26
+
+### What's Changed
+* ci: allow test workflow to run on branches that contain `develop` in the name by @yCodeTech in https://github.com/valeryan/vscode-phpsab/pull/268
+* Security - bump dependency versions from dependabot by @github-actions[bot] in https://github.com/valeryan/vscode-phpsab/pull/270
+* Security - bump dependency versions from dependabot by @github-actions[bot] in https://github.com/valeryan/vscode-phpsab/pull/272
+* security: improve argument validation by @yCodeTech in https://github.com/valeryan/vscode-phpsab/pull/273
+
+
+**Full Changelog**: https://github.com/valeryan/vscode-phpsab/compare/v0.0.30...v0.0.31
+
+
+## [0.0.30] - 2026-09-13
+
+### What's Changed
+* ci: add manual deployment workflow for marketplaces with optional Open VSX skip by @yCodeTech in https://github.com/valeryan/vscode-phpsab/pull/257
+* ci: version bump actions by @yCodeTech in https://github.com/valeryan/vscode-phpsab/pull/258
+* ci: add VS Marketplace token expiration checker to publish workflow. by @yCodeTech in https://github.com/valeryan/vscode-phpsab/pull/259
+* refactor: settings, resolvers and interfaces by @yCodeTech in https://github.com/valeryan/vscode-phpsab/pull/262
+* build: improve building and linting the extension by @yCodeTech in https://github.com/valeryan/vscode-phpsab/pull/263
+* ci: request review for failed Dependabot PR merges. by @yCodeTech in https://github.com/valeryan/vscode-phpsab/pull/265
+
+
+**Full Changelog**: https://github.com/valeryan/vscode-phpsab/compare/v0.0.29...v0.0.30
+
+
+## [0.0.29] - 2026-09-09
+
+### What's Changed
+* fix: on change of external extension php settings by @yCodeTech in https://github.com/valeryan/vscode-phpsab/pull/256
+
+
+**Full Changelog**: https://github.com/valeryan/vscode-phpsab/compare/v0.0.28...v0.0.29
+
+
+## [0.0.28] - 2026-08-30
+
+### What's Changed
+* fix: expand ~ in executablePathCS/CBF settings by @jmwerk in https://github.com/valeryan/vscode-phpsab/pull/253
+* fix: relative paths for exclude glob patterns by @yCodeTech in https://github.com/valeryan/vscode-phpsab/pull/231
+* chore: update eslint and dependencies by @yCodeTech in https://github.com/valeryan/vscode-phpsab/pull/255
+* docs: add a note that specifying multiple standards is supported. by @yCodeTech in https://github.com/valeryan/vscode-phpsab/pull/254
+
+### New Contributors
+* @jmwerk made their first contribution in https://github.com/valeryan/vscode-phpsab/pull/253
+
+**Full Changelog**: https://github.com/valeryan/vscode-phpsab/compare/v0.0.27...v0.0.28
+
+
+## [0.0.27] - 2026-08-11
+
+### What's Changed
+* Security - bump dependency versions from dependabot by @github-actions[bot] in https://github.com/valeryan/vscode-phpsab/pull/245
+
+
+**Full Changelog**: https://github.com/valeryan/vscode-phpsab/compare/v0.0.26...v0.0.27
+
+
 ## [0.0.26] - 2026-07-09
 
 ### What's Changed

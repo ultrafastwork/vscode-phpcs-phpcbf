@@ -1,20 +1,35 @@
 import { minimatch } from 'minimatch';
 import os from 'node:os';
+import path from 'node:path';
 import { ExtensionContext, extensions, TextDocument, window } from 'vscode';
 import type {
-  PHPCSArgumentKey,
+  PHPCSAdditionalArgumentKey,
   PHPCSInternalArgumentKey,
 } from '../interfaces/arguments';
 import {
   PHPCSArgumentValidation,
   validAdditionalArguments,
-  validFlags,
+  validAdditionalFlagArguments,
+  validAdditionalValueArguments,
   validInternalArguments,
 } from '../interfaces/arguments';
 import { ExtensionInfo } from '../interfaces/extensionInfo';
-import { ResourceSettings } from '../interfaces/resource-settings';
+import { ResourceSettings } from '../interfaces/settings';
 import { logger } from '../logger';
-import { isWin } from '../resolvers/path-resolver-utils';
+import { isPathValid, isWin } from '../resolvers/path-resolver-utils';
+
+// Set of allowed additional flag argument keys for quick lookup.
+const allowedAdditionalFlagKeys: Set<string> = new Set(
+  validAdditionalFlagArguments,
+);
+// Set of allowed additional value argument keys for quick lookup.
+const allowedAdditionalValueKeys: Set<string> = new Set(
+  validAdditionalValueArguments,
+);
+// Set of internal argument keys for quick lookup.
+const internalArgumentKeys: Set<string> = new Set(validInternalArguments);
+// Set of valid additional argument keys for quick lookup.
+const additionalArgumentKeys: Set<string> = new Set(validAdditionalArguments);
 
 const extensionInfo: ExtensionInfo = {
   id: '',
@@ -22,6 +37,10 @@ const extensionInfo: ExtensionInfo = {
   version: '',
 };
 
+/**
+ * Set the extension information based on the VS Code context.
+ * @param {ExtensionContext} context The extension context provided by VS Code.
+ */
 export const setExtensionInfo = (context: ExtensionContext) => {
   // Get extension unique identifier from context
   const id = context.extension.id;
@@ -32,6 +51,10 @@ export const setExtensionInfo = (context: ExtensionContext) => {
   extensionInfo.version = String(packageJSON?.version ?? 'unknown');
 };
 
+/**
+ * Get the extension information.
+ * @returns {ExtensionInfo} The current extension information.
+ */
 export const getExtensionInfo = (): ExtensionInfo => {
   return extensionInfo;
 };
@@ -95,8 +118,10 @@ const validateAdditionalArguments = (
     return [];
   }
 
-  // Set a variable with a default true value so we can test it later.
-  let isArgValid: boolean = true;
+  // Set a variable with a default false value so we can keep track if there
+  // were any invalid arguments. As soon as we encounter an invalid argument,
+  // this variable will be set to true, and will not be reset back to false.
+  let hasInvalidArguments: boolean = false;
   const argErrors: string[] = [];
 
   // Set a default warning message in case we need it later.
@@ -109,7 +134,11 @@ const validateAdditionalArguments = (
   const filteredArguments = additionalArguments.filter((arg) => {
     // If the argument is an internally added argument, filter it out.
     if (isInternalArgumentKey(getArgumentKey(arg))) {
-      isArgValid = false;
+      // Set the variable to true to indicate that there was at least one invalid argument.
+      hasInvalidArguments = true;
+      argErrors.push(
+        `Argument "${arg}" cannot be overwritten as it is managed internally.`,
+      );
       return false;
     }
 
@@ -118,21 +147,23 @@ const validateAdditionalArguments = (
     // Validate the argument.
     const { isValid, errors } = validateArgument(arg);
 
-    // Set isArgValid to the result of the validation so we can
-    // use it later outside this scope.
-    isArgValid = isValid;
+    // If there are any errors...
+    if (!isValid) {
+      // Set the variable to true to indicate that there was at least one invalid argument.
+      hasInvalidArguments = true;
+    }
 
     // Collect any errors for logging later.
     argErrors.push(...errors);
 
-    // Then filter it depending on it's validity.
-    return isArgValid;
+    // Then return it to the filtered array depending on it's validity.
+    return isValid;
   });
 
   // If array is not empty (after filtering)...
   if (filteredArguments.length > 0) {
     // If any arguments were invalid, set some messages.
-    if (!isArgValid) {
+    if (hasInvalidArguments) {
       txt = '\nRunning with the filtered arguments';
       logMsg += `${txt}: "${filteredArguments.join(', ')}".`;
     }
@@ -149,7 +180,7 @@ const validateAdditionalArguments = (
   warningMsg += `${txt}, for more details please see the Output channel.`;
 
   // If any arguments were invalid...
-  if (!isArgValid) {
+  if (hasInvalidArguments) {
     // Log the warning messages and inform the user.
     logger.warn(logMsg);
     // Show a warning message to the user, and offer to open the output channel.
@@ -172,27 +203,25 @@ const validateAdditionalArguments = (
  * @param {string[]} args The command line arguments to parse.
  * @returns {string[]} The parsed arguments.
  */
-export const parseArgs = (args: string[]) => {
-  const parsedArgs: string[] = [];
+export const parseArgs = (args: string[]): string[] => {
+  /**
+   * Quotes a command line argument based on the OS.
+   * Wraps the argument in the appropriate quotes for the OS;
+   * Windows uses double quotes and *nix uses single quotes.
+   *
+   * @see https://ss64.com/nt/syntax-esc.html#quotes for Windows quoting rules
+   * @see https://ss64.com/bash/syntax-quoting.html for *nix quoting rules
+   *
+   * @param {string} arg The argument to quote.
+   * @returns {string} The quoted argument.
+   */
+  const quote = isWin()
+    ? (arg: string) => `"${arg}"`
+    : (arg: string) => `'${arg}'`;
 
-  // For each argument, wrap in quotes to allow spaces in paths
-  // and to help prevent command injection.
-  args.forEach((arg: string) => {
-    // Windows...
-    if (isWin()) {
-      // Wrap in double quotes.
-      // See https://ss64.com/nt/syntax-esc.html#quotes
-      parsedArgs.push(`"${arg}"`);
-    }
-    // *nix...
-    else {
-      // Wrap in single quotes.
-      // See https://ss64.com/bash/syntax-quoting.html
-      parsedArgs.push(`'${arg}'`);
-    }
-  });
-
-  return parsedArgs;
+  // Wrap each argument in OS-appropriate quotes to preserve
+  // spaces in paths and prevent command injection.
+  return args.map(quote);
 };
 
 /**
@@ -213,8 +242,16 @@ const validateArgument = (arg: string): PHPCSArgumentValidation => {
     return validateKeyValueArgument(arg, errors);
   }
 
-  // Handle flag arguments (no value)
-  if (!validFlags.includes(arg)) {
+  // If a value-taking argument was passed without a value (e.g., "--severity")
+  if (allowedAdditionalValueKeys.has(arg)) {
+    return {
+      isValid: false,
+      errors: [`Argument "${arg}" requires a value (e.g., "${arg}=<value>").`],
+    };
+  }
+
+  // Handle flag arguments (no value) and only allow known additional flags.
+  if (!allowedAdditionalFlagKeys.has(arg)) {
     errors.push(`Invalid flag argument: "${arg}"`);
   }
 
@@ -234,28 +271,60 @@ const validateKeyValueArgument = (
   arg: string,
   errors: string[],
 ): PHPCSArgumentValidation => {
-  const [key, value] = arg.split('=', 2) as [PHPCSArgumentKey, string];
+  // Split an argument like `--ignore=foo/**` into its name and value.
+  // A value may be empty for malformed input, in which case it should be treated as invalid.
+  const separatorIndex = arg.indexOf('=');
+  const keyRaw = separatorIndex === -1 ? arg : arg.slice(0, separatorIndex);
+  const value = separatorIndex === -1 ? '' : arg.slice(separatorIndex + 1);
 
-  if (!validAdditionalArguments.includes(key)) {
+  // If a flag argument was passed with a value (e.g., "--ignore-annotations=true")
+  if (allowedAdditionalFlagKeys.has(keyRaw)) {
+    return {
+      isValid: false,
+      errors: [
+        `Flag argument "${keyRaw}" does not accept a value. Use "${keyRaw}" without '=${value}'.`,
+      ],
+    };
+  }
+
+  // If the key is NOT in the allowed additional argument keys map,
+  // then return an invalid result immediately.
+  if (!isAdditionalArgumentKey(keyRaw)) {
     return { isValid: false, errors: [`Invalid argument: "${arg}"`] };
   }
+
+  // Check for an empty value (e.g. "--severity=")
+  if (value === '') {
+    return {
+      isValid: false,
+      errors: [`Argument "${keyRaw}" requires a non-empty value.`],
+    };
+  }
+
+  // The key is now narrowed to the correct typing and is
+  // guaranteed to be an allowed additional argument key.
+  const key = keyRaw;
 
   // Validate specific argument values
   switch (key) {
     case '--filter':
       // Filter is either 'GitStaged', 'GitModified', or a path to a custom filter class.
+
+      // Validate the filter value.
       if (!validateFilterValue(value)) {
         errors.push(
-          `Invalid argument value: "${value}". This must be either 'GitStaged', 'GitModified', or a valid file path.`,
+          `Invalid --filter argument value: "${value}". This must be either 'GitStaged', 'GitModified', or a valid path to a custom filter class.`,
         );
       }
       break;
 
     case '--ignore':
       // Ignore is a comma-separated list of glob patterns.
-      if (!/^[a-zA-Z0-9.*/_\\,-]+$/.test(value)) {
+
+      // Validate the ignore value.
+      if (!validateIgnoreValue(value)) {
         errors.push(
-          `Invalid argument value: "${value}". This must be a comma-separated list of glob patterns.`,
+          `Invalid --ignore argument value: "${value}". The comma-separated list of glob patterns can only contain standard path characters, spaces, and wildcards.`,
         );
       }
       break;
@@ -264,24 +333,28 @@ const validateKeyValueArgument = (
     case '--error-severity':
     case '--warning-severity':
       // Validate severity levels, which are numeric 0-10
+
+      // Validate the severity value.
       if (!/^(0|[1-9]|10)$/.test(value)) {
-        errors.push(`Invalid argument value: "${value}". This must be 0-10.`);
+        errors.push(
+          `Invalid ${key} argument value: "${value}". This must be 0-10.`,
+        );
       }
       break;
 
     case '--exclude':
-      // Exclude is a comma-separated list of sniffs.
+      // Exclude is a comma-separated list of sniffs (Standard.Category.Sniff).
 
-      // Sniffs can contain letters, numbers, underscores, dots, and commas.
-      if (!/^[a-zA-Z0-9_\.,]+$/.test(value)) {
+      // Validate the exclude value.
+      if (!validateExcludeValue(value)) {
         errors.push(
-          `Invalid argument value: "${value}". This must be a comma-separated list of sniffs containing only letters, numbers, underscores and dots.`,
+          `Invalid --exclude argument value: "${value}". This must be a comma-separated list of sniffs in the form of "Standard.Category.Sniff", containing only alphanumeric characters, underscores and dots.`,
         );
       }
       break;
 
     default:
-      errors.push(`Invalid argument value: "${value}"`);
+      errors.push(`Invalid ${key} argument value: "${value}"`);
   }
 
   return {
@@ -291,19 +364,64 @@ const validateKeyValueArgument = (
 };
 
 /**
- * Validates --filter argument values
- * @param {string} value The filter value to validate
- * @returns {boolean} Whether the filter value is valid
+ * Validates `--filter` argument values.
+ * @param {string} value The value to validate.
+ * @returns {boolean} Whether the value is valid.
  */
 const validateFilterValue = (value: string): boolean => {
-  const isValidSpecialValue = value === 'GitStaged' || value === 'GitModified';
-  const isValidFilePath = /^[a-zA-Z0-9._/\\: -]+$/.test(value);
-
-  if (isValidSpecialValue || isValidFilePath) {
+  // Check for the special values 'GitStaged' and 'GitModified' first.
+  if (value === 'GitStaged' || value === 'GitModified') {
     return true;
   }
 
-  return false;
+  // Check if the value is a valid PHP file path.
+  return isPathValid(value, 'php');
+};
+
+/**
+ * Validates `--ignore` argument values.
+ * @param {string} value The value to validate.
+ * @returns {boolean} Whether the value is valid.
+ */
+const validateIgnoreValue = (value: string): boolean => {
+  // Split the value into individual glob patterns to validate each one.
+  const patterns = value
+    .split(',')
+    .map((pattern) => pattern.trim())
+    .filter(Boolean);
+
+  // Regex to validate each glob pattern. They must only contain
+  // standard path characters, spaces, and wildcards.
+  const globRegex = /^[a-zA-Z0-9.*/_\\:?\[\]() -]+$/;
+
+  // Check that there are patterns to validate (ensuring the value is not empty) and
+  // then validate that each pattern matches the glob regex to catch obvious errors.
+  return (
+    patterns.length > 0 && patterns.every((pattern) => globRegex.test(pattern))
+  );
+};
+
+/**
+ * Validates `--exclude` argument values.
+ * @param {string} value The value to validate.
+ * @returns {boolean} Whether the value is valid.
+ */
+const validateExcludeValue = (value: string): boolean => {
+  // Exclude is a comma-separated list of sniffs (Standard.Category.Sniff).
+
+  // Split the value into individual sniffs to validate each one.
+  const sniffs = value
+    .split(',')
+    .map((sniff) => sniff.trim())
+    .filter(Boolean);
+
+  // Regex to validate each sniff. They must only contain alphanumeric
+  // characters, underscores, and dots. (Hyphens are not allowed.)
+  const sniffRegex = /^[a-zA-Z0-9_.]+$/;
+
+  // Check that there are sniffs to validate (ensuring the value is not empty) and
+  // then validate that each sniff matches the regex to catch obvious errors.
+  return sniffs.length > 0 && sniffs.every((sniff) => sniffRegex.test(sniff));
 };
 
 /**
@@ -325,7 +443,18 @@ const getArgumentKey = (arg: string): string => {
 const isInternalArgumentKey = (
   key: string,
 ): key is PHPCSInternalArgumentKey => {
-  return (validInternalArguments as readonly string[]).includes(key);
+  return internalArgumentKeys.has(key);
+};
+
+/**
+ * Determines whether an argument key is part of the additional argument set.
+ * @param {string} key The argument key to test.
+ * @returns {boolean} `true` when the key is an additional argument key.
+ */
+const isAdditionalArgumentKey = (
+  key: string,
+): key is PHPCSAdditionalArgumentKey => {
+  return additionalArgumentKeys.has(key);
 };
 
 /**
@@ -408,8 +537,18 @@ const matchesExcludePatterns = (
     return false;
   }
 
+  // Match against both the full absolute path and the workspace-relative path so
+  // users can express exclude globs in either form without surprising failures.
+  const absolutePath = document.uri.fsPath;
+  const relativePath = workspaceRoot
+    ? path.relative(workspaceRoot, document.uri.fsPath)
+    : null;
+
   for (const pattern of patterns) {
-    if (minimatch(document.uri.fsPath, pattern, { dot: true })) {
+    if (
+      minimatch(absolutePath, pattern, { dot: true }) ||
+      (relativePath !== null && minimatch(relativePath, pattern, { dot: true }))
+    ) {
       logger.info(
         `Document "${document.fileName}" matches exclude pattern: "${pattern}", and will be ignored.`,
       );
