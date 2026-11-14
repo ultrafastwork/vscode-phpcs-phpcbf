@@ -120,7 +120,7 @@ jobs:
             echo "ℹ️  Package.json already has version $VERSION, skipping update"
           else
             echo "📦 Updating package.json from $CURRENT_VERSION to $VERSION"
-            npm version $VERSION --no-git-tag-version
+            pnpm pkg set version="$VERSION"
             echo "✅ Successfully updated package version to $VERSION"
           fi
 
@@ -259,6 +259,7 @@ jobs:
         uses: HaaLeo/publish-vscode-extension@v2
         with:
           pat: ${{ secrets.OPEN_VSX_TOKEN }}
+          dependencies: false
 
       - name: Skip Open VSX Publishing
         if: github.event_name == 'workflow_dispatch' && inputs.skip_open_vsx == true
@@ -269,6 +270,7 @@ jobs:
         with:
           pat: ${{ secrets.VS_MARKETPLACE_TOKEN }}
           registryUrl: https://marketplace.visualstudio.com
+          dependencies: false
 
       - name: Report Success
         run: |

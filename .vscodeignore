@@ -2,7 +2,6 @@
 .vscode-test/**
 src/**
 .gitignore
-.yarnrc
 **/tsconfig.json
 biome.json
 .markdownlint-cli2.jsonc

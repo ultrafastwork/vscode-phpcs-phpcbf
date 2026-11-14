@@ -10,7 +10,7 @@ This extension is designed to use an auto config search functionality. When it f
 
 ## Setup Development Version
 
-- Install the VS Code [npm extension](https://marketplace.visualstudio.com/items?itemName=eg2.vscode-npm-script)
+- Install [pnpm](https://pnpm.io/installation) (the version pinned in `packageManager` in `package.json`, e.g. via `corepack enable`). npm and yarn are not supported.
 - Install the VS Code [Biome extension](https://marketplace.visualstudio.com/items?itemName=biomejs.biome) (for linting and formatting code)
 - Install the VS Code [markdownlint extension](https://marketplace.visualstudio.com/items?itemName=DavidAnson.vscode-markdownlint) (for linting Markdown files)
 - Clone this repository and checkout `develop` branch
@@ -29,10 +29,9 @@ This will launch a new VS Code window named `Extension Development Host`, automa
 
 ## Installing the Development Version
 
-To install a development version of this extension for testing you will need to install the vsce package and package the project into a `.vsix` file.
+To install a development version of this extension for testing you will need to package the project into a `.vsix` file.
 
-- Install vsce: `npm install -g @vscode/vsce`
-- In the root of the project run: `vsce package`
+- In the root of the project run: `pnpm run package` (runs `vsce package --no-dependencies` via `pnpm dlx`; the extension is bundled with esbuild, so `node_modules` is not shipped)
 - From the VSCode main menu, select "Extensions", click the `...` on the Extensions tab.
 - Find the option that is `Install from VSIX...` and follow the prompts.
 - After installing, you may need to reload VSCode.
