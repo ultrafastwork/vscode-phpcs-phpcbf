@@ -8,6 +8,7 @@ biome.json
 pnpm-lock.yaml
 pnpm-workspace.yaml
 .github/**
+.agents/**
 AGENTS.md
 DEVELOPMENT.md
 **/*.map
