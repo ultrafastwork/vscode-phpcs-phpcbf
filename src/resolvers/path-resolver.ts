@@ -2,6 +2,8 @@ import type {
   PathResolver,
   PathResolverOptions,
 } from '../interfaces/path-resolver';
+import { logger } from '../logger';
+import { showWarningOnce } from '../utils/notifications';
 import { createComposerPathResolver } from './composer-path-resolver';
 import { createGlobalPathResolver } from './global-path-resolver';
 import {
@@ -10,23 +12,36 @@ import {
 } from './path-resolver-utils';
 
 /**
- * Resolve the path to an executable using the provided resolvers.
+ * Resolve the path to an executable using the provided resolvers, in order.
+ *
+ * A resolver that fails (e.g. Composer lists phpcs but `vendor/bin` is missing)
+ * produces a warning and the next resolver is tried. If nothing is found an empty
+ * string is returned, and settings validation then disables the tool with a
+ * warning instead of the whole extension failing to activate.
+ *
  * @param {PathResolver[]} resolvers An array of PathResolver objects to attempt resolution with.
- * @returns {Promise<string>} A promise that resolves to the resolved path of the executable.
+ * @param {string} executable The executable name, for logging.
+ * @returns {Promise<string>} The resolved path, or an empty string if not found.
  */
-const resolvePath = async (resolvers: PathResolver[]): Promise<string> => {
-  let resolvedPath: string = '';
+const resolvePath = async (
+  resolvers: PathResolver[],
+  executable: string,
+): Promise<string> => {
   for (const resolver of resolvers) {
-    const resolverPath = await resolver.resolve();
-    if (resolverPath) {
-      resolvedPath = resolverPath;
-      break;
+    try {
+      const resolverPath = await resolver.resolve();
+      if (resolverPath) {
+        return resolverPath;
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(message);
+      showWarningOnce(message);
     }
   }
-  if (!resolvedPath) {
-    throw new Error(`Unable to locate the executable.`);
-  }
-  return resolvedPath;
+
+  logger.debug(`Unable to locate the ${executable} executable.`);
+  return '';
 };
 
 /**
@@ -61,7 +76,7 @@ export const createPathResolver = (
     extension: getPlatformExtension(),
     pathSeparator: getPlatformPathSeparator(),
     resolve: async (): Promise<string> => {
-      return resolvePath(resolvers);
+      return resolvePath(resolvers, executableFile);
     },
   };
 };

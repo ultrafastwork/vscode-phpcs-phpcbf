@@ -41,18 +41,29 @@ export const getEnvPathSeparator = (): string => (isWin() ? ';' : ':');
  * @param phpExecutablePath The PHP executable path from extension settings.
  */
 export const addPhpToEnvPath = (phpExecutablePath: string) => {
-  // If the path ends with php.exe, remove it because we only need the directory path.
-  if (phpExecutablePath.endsWith('php.exe')) {
-    phpExecutablePath = phpExecutablePath.replace('php.exe', '');
+  // PATH needs the directory containing PHP, not the executable itself
+  // (e.g. "C:\php\php.exe" or "/opt/php/bin/php" or "/usr/bin/php8.3").
+  const phpDir = /^php[\d.]*(\.exe)?$/i.test(path.basename(phpExecutablePath))
+    ? path.dirname(phpExecutablePath)
+    : phpExecutablePath;
+
+  const normalize = (entry: string) => {
+    const normalized = path.normalize(entry).replace(/[\\/]+$/, '');
+    return isWin() ? normalized.toLowerCase() : normalized;
+  };
+
+  const separator = getEnvPathSeparator();
+  const entries = (process.env.PATH ?? '').split(separator).filter(Boolean);
+
+  if (entries.some((entry) => normalize(entry) === normalize(phpDir))) {
+    return;
   }
 
-  if (!process.env?.PATH?.includes(phpExecutablePath)) {
-    process.env.PATH =
-      process.env.PATH + getEnvPathSeparator() + phpExecutablePath;
-    logger.debug(
-      `Added PHP executable path (${phpExecutablePath}) to extension environment.`,
-    );
-  }
+  // Prepend so the configured PHP takes precedence over any other PHP on PATH.
+  process.env.PATH = [phpDir, ...entries].join(separator);
+  logger.debug(
+    `Added PHP executable path (${phpDir}) to extension environment.`,
+  );
 };
 
 /**

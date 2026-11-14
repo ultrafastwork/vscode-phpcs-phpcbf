@@ -7,7 +7,7 @@ export interface ConsoleError extends Error {
    * Property taken from the generic `Error` class.
    * @see https://nodejs.org/api/errors.html#class-error
    */
-  cause?: any;
+  cause?: unknown;
 
   /**
    * If present, the `path` property indicates a file system error, and is the file or

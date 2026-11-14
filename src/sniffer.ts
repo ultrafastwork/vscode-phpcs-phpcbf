@@ -1,5 +1,5 @@
-import { type SpawnOptions, spawn } from 'node:child_process';
 import {
+  type CancellationToken,
   CancellationTokenSource,
   type ConfigurationChangeEvent,
   Diagnostic,
@@ -7,87 +7,107 @@ import {
   DiagnosticSeverity,
   type Disposable,
   languages,
+  Position,
   Range,
   type TextDocument,
   type TextDocumentChangeEvent,
-  type Uri,
   window,
   workspace,
 } from 'vscode';
-import type { OriginalCommand } from './interfaces/common';
-import type { ConsoleError } from './interfaces/console-error';
-import { PHPCSMessageType, type PHPCSReport } from './interfaces/phpcs-report';
-import type { Settings, SnifferMode } from './interfaces/settings';
+import {
+  type PHPCSMessage,
+  PHPCSMessageType,
+  type PHPCSReport,
+} from './interfaces/phpcs-report';
+import type { ResourceSettings, Settings } from './interfaces/settings';
 import { logger } from './logger';
 import { createStandardsPathResolver } from './resolvers/standards-path-resolver';
-import { loadSettings } from './settings';
+import { getResourceSettingsFor, getSettings } from './settings';
 import {
   determineNodeError,
   getPhpNotFoundRegex,
 } from './utils/error-handling/error-helpers';
-import { addWindowsEnoentError } from './utils/error-handling/windows-enoent-error';
+import { debounce, getArgs, shouldProcess } from './utils/helpers';
 import {
-  constructCommandString,
-  debounce,
-  getArgs,
-  parseArgs,
-  shouldProcess,
-} from './utils/helpers';
+  describeFailureExitCode,
+  parsePhpcsJsonReport,
+} from './utils/phpcs-output';
+import {
+  describeCommand,
+  type RunCommandResult,
+  runCommand,
+} from './utils/process-runner';
 
-let settingsCache: Settings;
+/**
+ * Kill PHPCS if it takes longer than this.
+ */
+const SNIFFER_TIMEOUT_MS = 60_000;
+
 const diagnosticCollection: DiagnosticCollection =
   languages.createDiagnosticCollection('php');
 
 /**
  * The active validator listener.
  */
-let validatorListener: Disposable;
+let validatorListener: Disposable | undefined;
 
 /**
- * Token to cancel a current validation runs.
+ * Tokens to cancel in-flight validation runs, keyed by document URI string.
  */
-const runnerCancellations: Map<Uri, CancellationTokenSource> = new Map();
+const runnerCancellations: Map<string, CancellationTokenSource> = new Map();
 
 /**
- * Get the current cached settings, loading them if necessary.
- * @returns {Promise<Settings>} A promise that resolves to the current settings.
- */
-const getSettings = async (): Promise<Settings> => {
-  if (!settingsCache) {
-    settingsCache = await loadSettings();
-  }
-  return settingsCache;
-};
-
-/**
- * Validates and lints a document.
+ * Validates and lints a document. Starting a new run for a document cancels
+ * (and kills) any run still in progress for the same document.
  *
  * @param document - The document to lint.
  * @returns {Promise<void>} A void promise that resolves once the validation is complete.
  */
 const validate = async (document: TextDocument): Promise<void> => {
-  const workspaceFolder = workspace.getWorkspaceFolder(document.uri);
-
   const settings = await getSettings();
-  const resourceConf = settings.resources[workspaceFolder?.index ?? 0];
+  const resourceConf = getResourceSettingsFor(settings, document.uri);
 
   // If the document should not be processed, return early.
-  if (shouldProcess(document, resourceConf, 'sniffer') === false) {
+  if (!resourceConf || !shouldProcess(document, resourceConf, 'sniffer')) {
     return;
   }
 
-  logger.startTimer('Sniffer');
-
-  const oldRunner = runnerCancellations.get(document.uri);
+  const key = document.uri.toString();
+  const oldRunner = runnerCancellations.get(key);
   if (oldRunner) {
     oldRunner.cancel();
     oldRunner.dispose();
   }
 
   const runner = new CancellationTokenSource();
-  runnerCancellations.set(document.uri, runner);
-  const { token } = runner;
+  runnerCancellations.set(key, runner);
 
+  try {
+    await runSniffer(document, settings, resourceConf, runner.token);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(`SNIFFER: ${message}`);
+  } finally {
+    if (runnerCancellations.get(key) === runner) {
+      runnerCancellations.delete(key);
+    }
+    runner.dispose();
+  }
+};
+
+/**
+ * Run PHPCS on a document and publish the resulting diagnostics.
+ * @param {TextDocument} document The document to lint.
+ * @param {Settings} settings The extension settings.
+ * @param {ResourceSettings} resourceConf The settings of the document's workspace folder.
+ * @param {CancellationToken} token Cancels the run.
+ */
+const runSniffer = async (
+  document: TextDocument,
+  settings: Settings,
+  resourceConf: ResourceSettings,
+  token: CancellationToken,
+): Promise<void> => {
   let standard: string;
 
   try {
@@ -99,7 +119,10 @@ const validate = async (document: TextDocument): Promise<void> => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     window.showErrorMessage(errorMessage, 'OK');
     logger.error(errorMessage);
+    return;
+  }
 
+  if (token.isCancellationRequested) {
     return;
   }
 
@@ -109,177 +132,154 @@ const validate = async (document: TextDocument): Promise<void> => {
     resourceConf.snifferArguments,
     'sniffer',
   );
+  const executable = resourceConf.executablePathCS;
 
-  const fileText = document.getText();
+  logger.info(`SNIFFER COMMAND: ${describeCommand(executable, lintArgs)}`);
+  logger.startTimer('Sniffer');
 
-  const options: SpawnOptions = {
-    cwd:
-      resourceConf.workspaceRoot !== null
-        ? resourceConf.workspaceRoot
-        : undefined,
-    env: process.env,
-    // Required to prevent EINVAL errors when spawning .bat files on Windows.
-    // https://github.com/valeryan/vscode-phpsab/issues/128
-    // https://github.com/nodejs/node/issues/52554
-    shell: true,
-  };
-
-  const CSExecutable = resourceConf.executablePathCS;
-  const parsedArgs = parseArgs(lintArgs);
-
-  const command = constructCommandString(CSExecutable, parsedArgs);
-
-  logger.info(`SNIFFER COMMAND: ${command}`);
-
-  const sniffer = spawn(command, options);
-
-  // Set the original command information (not parsed) for Windows ENOENT error handling
-  const originalCommand: OriginalCommand = {
-    commandPath: CSExecutable,
-    args: lintArgs,
-  };
-
-  addWindowsEnoentError(sniffer, originalCommand, 'spawn');
-
-  if (sniffer.stdin) {
-    sniffer.stdin.write(fileText);
-    sniffer.stdin.end();
-  } else {
-    // Kill the process if we can't write to its `stdin`. We use `SIGKILL` to forcefully
-    // terminate the process, and prevent it from hanging indefinitely.
-    // This allows the `done` promise to resolve.
-    sniffer.kill('SIGKILL');
-  }
-
-  let stdout = '';
-  let stderr = '';
-  let nodeError: ConsoleError | null = null;
-
-  if (sniffer.stdout) {
-    sniffer.stdout.on('data', (data) => (stdout += data));
-  }
-  if (sniffer.stderr) {
-    sniffer.stderr.on('data', (data) => (stderr += data));
-  }
-
-  sniffer.on('error', (error) => (nodeError = error as ConsoleError));
-
-  const done = new Promise<void>((resolve, reject) => {
-    sniffer.on('close', (exitcode) => {
-      logger.info(`SNIFFER EXIT CODE: ${exitcode}`);
-
-      if (stderr) {
-        logger.error(`SNIFFER STDERR: ${stderr.trim()}`);
-      }
-
-      // If the sniffer was cancelled, OR the process was killed manually, OR there's
-      // no output from sniffer, then just resolve the promise and return early.
-      if (token.isCancellationRequested || sniffer.killed || !stdout) {
-        let errorMsg = '';
-        let extraLoggerMsg = '';
-        // If the process was killed manually, we log an error message and inform the user.
-        if (sniffer.killed) {
-          errorMsg =
-            'Unable to communicate with PHPCS. Please check your installation/configuration and try again.';
-          extraLoggerMsg = `\nSniffer stdin is null - cannot send file content to phpcs`;
-        }
-        // Check if there was a node error during the spawn process.
-        else if (nodeError) {
-          // Destructure the returned object and assign to variables.
-          ({ errorMsg, extraLoggerMsg } = determineNodeError(
-            nodeError,
-            'sniffer',
-          ));
-        }
-        // Check if stderr returns with the "php is not recognized" or equivalent error.
-        // If it does, then show an error message to the user because PHP is not on the
-        // system's environment path.
-        else if (getPhpNotFoundRegex().test(stderr)) {
-          errorMsg = `Please add PHP to your system's environment path, or use the extension setting "phpExecutablePath". - PHPCS error: ${stderr}`;
-        }
-
-        logger.error(`${errorMsg}${extraLoggerMsg}`);
-        window.showErrorMessage(errorMsg, 'OK');
-
-        resolve();
-        return;
-      }
-      const diagnostics: Diagnostic[] = [];
-      // Try-catch to handle JSON parse errors
-      try {
-        const { files }: PHPCSReport = JSON.parse(stdout);
-        for (const file in files) {
-          files[file].messages.forEach(
-            ({ message, line, column, type, source, fixable }) => {
-              const zeroLine = line - 1;
-              const ZeroColumn = column - 1;
-
-              const range = new Range(
-                zeroLine,
-                ZeroColumn,
-                zeroLine,
-                ZeroColumn,
-              );
-              const severity =
-                type === PHPCSMessageType.ERROR
-                  ? DiagnosticSeverity.Error
-                  : DiagnosticSeverity.Warning;
-              let output = message;
-              if (settings.snifferShowSources) {
-                output += `\n(${source})`;
-              }
-              if (settings.snifferShowFixabilityIcons) {
-                output += `\nAuto-fixable: ${fixable ? '✔️' : '❌'}`;
-              }
-              const diagnostic = new Diagnostic(range, output, severity);
-              diagnostic.source = '\nphpcs';
-              diagnostics.push(diagnostic);
-            },
-          );
-        }
-        resolve();
-      } catch (error) {
-        let message = '';
-        if (stdout) {
-          message += `${stdout}\n`;
-        }
-        if (stderr) {
-          message += `${stderr}\n`;
-        }
-        if (error instanceof Error) {
-          message += error.toString();
-        } else {
-          message += 'Unexpected error';
-        }
-        window.showErrorMessage(message, 'OK');
-        logger.error(message);
-        reject(message);
-      }
-      diagnosticCollection.set(document.uri, diagnostics);
-      runner.dispose();
-      runnerCancellations.delete(document.uri);
-    });
+  const run = runCommand(executable, lintArgs, {
+    cwd: resourceConf.workspaceRoot ?? undefined,
+    input: document.getText(),
+    timeout: SNIFFER_TIMEOUT_MS,
+    token,
   });
+  window.setStatusBarMessage('PHP Code Sniffer: validating…', run);
 
-  window.setStatusBarMessage('PHP Code Sniffer: validating…', done);
+  const result = await run;
   logger.endTimer('Sniffer');
+
+  // A newer run replaced this one; it will publish the diagnostics.
+  if (result.cancelled || token.isCancellationRequested) {
+    logger.info('SNIFFER: Run cancelled.');
+    return;
+  }
+
+  logger.info(`SNIFFER EXIT CODE: ${result.exitCode}`);
+  if (result.stderr) {
+    logger.error(`SNIFFER STDERR: ${result.stderr.trim()}`);
+  }
+
+  const report = result.error ? null : parsePhpcsJsonReport(result.stdout);
+
+  if (!report) {
+    reportSnifferFailure(result);
+    return;
+  }
+
+  diagnosticCollection.set(
+    document.uri,
+    buildDiagnostics(document, report, settings),
+  );
+};
+
+/**
+ * Tell the user why PHPCS did not produce a report.
+ * @param result The result of the PHPCS process.
+ */
+const reportSnifferFailure = (result: RunCommandResult): void => {
+  let errorMsg: string;
+  let extraLoggerMsg = '';
+
+  if (result.error) {
+    ({ errorMsg, extraLoggerMsg } = determineNodeError(
+      result.error,
+      'sniffer',
+    ));
+  } else if (getPhpNotFoundRegex().test(result.stderr)) {
+    errorMsg = `Please add PHP to your system's environment path, or use the extension setting "phpExecutablePath". - PHPCS error: ${result.stderr.trim()}`;
+  } else {
+    const output = [result.stdout.trim(), result.stderr.trim()]
+      .filter(Boolean)
+      .join('\n');
+    errorMsg = `${describeFailureExitCode('PHPCS', result.exitCode)} ${
+      output || 'PHPCS did not return a report.'
+    }`;
+  }
+
+  logger.error(`${errorMsg}${extraLoggerMsg}`);
+  window.showErrorMessage(errorMsg, 'OK');
+};
+
+/**
+ * Convert a PHPCS report into VS Code diagnostics.
+ * @param {TextDocument} document The linted document.
+ * @param {PHPCSReport} report The PHPCS JSON report.
+ * @param {Settings} settings The extension settings.
+ * @returns {Diagnostic[]} The diagnostics.
+ */
+const buildDiagnostics = (
+  document: TextDocument,
+  report: PHPCSReport,
+  settings: Settings,
+): Diagnostic[] => {
+  const diagnostics: Diagnostic[] = [];
+
+  for (const file of Object.values(report.files)) {
+    for (const message of file.messages) {
+      diagnostics.push(toDiagnostic(document, message, settings));
+    }
+  }
+
+  return diagnostics;
+};
+
+/**
+ * Convert a single PHPCS message into a diagnostic.
+ * @param {TextDocument} document The linted document.
+ * @param {PHPCSMessage} message The PHPCS message.
+ * @param {Settings} settings The extension settings.
+ * @returns {Diagnostic} The diagnostic.
+ */
+const toDiagnostic = (
+  document: TextDocument,
+  { message, line, column, type, source, fixable }: PHPCSMessage,
+  settings: Settings,
+): Diagnostic => {
+  // PHPCS is 1-based; clamp in case the document changed while PHPCS was running.
+  const zeroLine = Math.min(Math.max(line - 1, 0), document.lineCount - 1);
+  const lineLength = document.lineAt(zeroLine).text.length;
+  const zeroColumn = Math.min(Math.max(column - 1, 0), lineLength);
+  const position = new Position(zeroLine, zeroColumn);
+
+  // Highlight the word the message points at, if there is one.
+  const range =
+    document.getWordRangeAtPosition(position) ?? new Range(position, position);
+
+  const severity =
+    type === PHPCSMessageType.ERROR
+      ? DiagnosticSeverity.Error
+      : DiagnosticSeverity.Warning;
+
+  let output = message;
+  if (settings.snifferShowFixabilityIcons) {
+    output += `\nAuto-fixable: ${fixable ? '✔️' : '❌'}`;
+  }
+
+  const diagnostic = new Diagnostic(range, output, severity);
+  diagnostic.source = 'phpcs';
+  if (settings.snifferShowSources) {
+    diagnostic.code = source;
+  }
+
+  return diagnostic;
 };
 
 /**
  * Refreshes validation on any open documents.
  */
-const refresh = (): void => {
-  diagnosticCollection!.clear();
+export const refreshSniffer = (): void => {
+  diagnosticCollection.clear();
 
   workspace.textDocuments.forEach(validate);
 };
 
 /**
- * Clears diagnostics from a document.
+ * Clears diagnostics from a document, and stops any run in progress for it.
  *
  * @param {TextDocument} document - The document to clear diagnostics of.
  */
 const clearDocumentDiagnostics = ({ uri }: TextDocument): void => {
+  runnerCancellations.get(uri.toString())?.cancel();
   diagnosticCollection.delete(uri);
 };
 
@@ -288,19 +288,16 @@ const clearDocumentDiagnostics = ({ uri }: TextDocument): void => {
  * @returns {Promise<void>} A void promise that resolves once the validator listener has been set.
  */
 const setValidatorListener = async (): Promise<void> => {
-  if (validatorListener) {
-    validatorListener.dispose();
-  }
   const settings = await getSettings();
-  const run: SnifferMode = settings.snifferMode;
-  const delay: number = settings.snifferTypeDelay;
 
-  if (run === 'onType') {
+  validatorListener?.dispose();
+
+  if (settings.snifferMode === 'onType') {
     const validator = debounce(
       ({ document }: TextDocumentChangeEvent): void => {
         validate(document);
       },
-      delay,
+      settings.snifferTypeDelay,
     );
     validatorListener = workspace.onDidChangeTextDocument(validator);
   } else {
@@ -309,24 +306,14 @@ const setValidatorListener = async (): Promise<void> => {
 };
 
 /**
- * On configuration change, refreshes the settings cache,
- * updates the validator listener if necessary,
- * and re-validates/re-lints open documents.
+ * Handle a settings change. Must be called after the settings have been reloaded.
+ * Updates the validator listener if necessary, and re-validates open documents.
  *
- * @param {ConfigurationChangeEvent} event - The configuration change event.
- * @returns {Promise<void>} A void promise that resolves once the configuration change has been handled.
+ * @param {ConfigurationChangeEvent} event The configuration change event.
  */
-const onConfigChange = async (
+export const onSnifferSettingsChanged = (
   event: ConfigurationChangeEvent,
-): Promise<void> => {
-  if (
-    !event.affectsConfiguration('phpsab') &&
-    !event.affectsConfiguration('php')
-  ) {
-    return;
-  }
-  settingsCache = await loadSettings();
-
+): void => {
   if (
     event.affectsConfiguration('phpsab.snifferMode') ||
     event.affectsConfiguration('phpsab.snifferTypeDelay')
@@ -334,13 +321,19 @@ const onConfigChange = async (
     setValidatorListener();
   }
 
-  refresh();
+  refreshSniffer();
 };
 
 /**
- * Dispose Sniffer diagnostics.
+ * Dispose Sniffer diagnostics and stop any running PHPCS processes.
  */
 export const disposeSniffer = (): void => {
+  for (const runner of runnerCancellations.values()) {
+    runner.cancel();
+    runner.dispose();
+  }
+  runnerCancellations.clear();
+  validatorListener?.dispose();
   diagnosticCollection.clear();
   diagnosticCollection.dispose();
 };
@@ -348,24 +341,15 @@ export const disposeSniffer = (): void => {
 /**
  * Activates the Sniffer and register the event listeners.
  * @param {Disposable[]} subscriptions The array of disposables to which the event listeners will be added.
- * @param {Settings} settings The current settings for the Sniffer extension.
- * @returns {Promise<void>} A void promise that resolves once the Sniffer has been activated and event listeners have been set.
  */
-export const activateSniffer = async (
-  subscriptions: Disposable[],
-  settings: Settings,
-): Promise<void> => {
-  settingsCache = settings;
-
-  workspace.onDidChangeConfiguration(onConfigChange, null, subscriptions);
+export const activateSniffer = (subscriptions: Disposable[]): void => {
   workspace.onDidOpenTextDocument(validate, null, subscriptions);
   workspace.onDidCloseTextDocument(
     clearDocumentDiagnostics,
     null,
     subscriptions,
   );
-  workspace.onDidChangeWorkspaceFolders(refresh, this, subscriptions);
 
-  refresh();
+  refreshSniffer();
   setValidatorListener();
 };

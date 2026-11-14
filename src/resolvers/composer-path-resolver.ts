@@ -15,7 +15,11 @@ import {
 const hasComposerDependency = async (
   composerLockPath: string,
 ): Promise<boolean> => {
-  let dependencies = null;
+  type LockPackage = { name?: string };
+  let dependencies: {
+    packages?: LockPackage[];
+    'packages-dev'?: LockPackage[];
+  };
   try {
     const lockFile = await fs.readFile(composerLockPath, 'utf8');
     dependencies = JSON.parse(lockFile);
@@ -23,20 +27,11 @@ const hasComposerDependency = async (
     dependencies = {};
   }
 
-  const search = [];
-  if (dependencies['packages-dev']) {
-    search.push(dependencies['packages-dev']);
-  }
-  if (dependencies.packages) {
-    search.push(dependencies.packages);
-  }
-
-  return search.some((pkgs) => {
-    const match = pkgs.filter((pkg: any) => {
-      return pkg.name === 'squizlabs/php_codesniffer';
-    });
-    return match.length !== 0;
-  });
+  // PHP_CodeSniffer 4.x is still published as `squizlabs/php_codesniffer`.
+  return [
+    ...(dependencies['packages-dev'] ?? []),
+    ...(dependencies.packages ?? []),
+  ].some((pkg) => pkg?.name === 'squizlabs/php_codesniffer');
 };
 
 /**
@@ -120,7 +115,7 @@ export const createComposerPathResolver = (
 
       if (hasPhpcs && vendorPath) {
         try {
-          fs.access(vendorPath, fs.constants.R_OK || fs.constants.W_OK);
+          await fs.access(vendorPath, fs.constants.X_OK);
           resolvedPath = vendorPath;
         } catch {
           const relativeVendorPath = path.relative(workspaceRoot, vendorPath);

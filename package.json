@@ -61,13 +61,13 @@
         "phpsab.executablePathCBF": {
           "scope": "resource",
           "type": "string",
-          "default": null,
+          "default": "",
           "description": "Optional. The default path to the phpcbf executable. Can be overridden if auto search is enabled."
         },
         "phpsab.executablePathCS": {
           "scope": "resource",
           "type": "string",
-          "default": null,
+          "default": "",
           "description": "Optional. The default path to the phpcs executable. Can be overridden if auto search is enabled."
         },
         "phpsab.composerJsonPath": {
@@ -148,7 +148,7 @@
         },
         "phpsab.phpExecutablePath": {
           "type": "string",
-          "default": "null",
+          "default": "",
           "markdownDescription": "(Optional) The path to the PHP executable. This setting will only be used if the PHP executable from VSCode's built-in PHP extension setting `php.validate.executablePath` or Devsense's PHP Tools extension `php.executablePath` are not set."
         },
         "phpsab.excludeGlobs": {

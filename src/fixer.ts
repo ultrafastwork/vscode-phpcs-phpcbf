@@ -1,62 +1,35 @@
-import { type SpawnSyncOptions, spawnSync } from 'node:child_process';
 import {
-  type ConfigurationChangeEvent,
-  type Disposable,
+  type CancellationToken,
   Position,
-  type ProviderResult,
   Range,
   type TextDocument,
   TextEdit,
   window,
-  workspace,
 } from 'vscode';
-import type { OriginalCommand } from './interfaces/common';
-import type { ConsoleError } from './interfaces/console-error';
-import type { Settings } from './interfaces/settings';
 import { logger } from './logger';
 import { createStandardsPathResolver } from './resolvers/standards-path-resolver';
-import { loadSettings } from './settings';
+import { getResourceSettingsFor, getSettings } from './settings';
 import {
   determineNodeError,
   getPhpNotFoundRegex,
 } from './utils/error-handling/error-helpers';
-import { addWindowsEnoentError } from './utils/error-handling/windows-enoent-error';
+import { getArgs, shouldProcess } from './utils/helpers';
 import {
-  constructCommandString,
-  getArgs,
-  parseArgs,
-  shouldProcess,
-} from './utils/helpers';
-
-let settingsCache: Settings;
+  describeFailureExitCode,
+  isCompletedExitCode,
+  PHPCSExitCode,
+} from './utils/phpcs-output';
+import { describeCommand, runCommand } from './utils/process-runner';
 
 /**
- * Get the current cached settings, loading them if necessary.
- * @returns {Promise<Settings>} A promise that resolves to the current settings.
+ * Kill PHPCBF if it takes longer than this.
  */
-const getSettings = async (): Promise<Settings> => {
-  if (!settingsCache) {
-    settingsCache = await loadSettings();
-  }
-  return settingsCache;
-};
+const FIXER_TIMEOUT_MS = 60_000;
 
 /**
- * Reload and recache configuration settings when the relevant editor configuration changes.
- * @param {ConfigurationChangeEvent} event The configuration change event that triggered the reload.
- * @returns {Promise<void>} A void promise that resolves once the settings have been reloaded.
+ * How long fixer status messages stay in the status bar.
  */
-const reloadSettings = async (
-  event: ConfigurationChangeEvent,
-): Promise<void> => {
-  if (
-    !event.affectsConfiguration('phpsab') &&
-    !event.affectsConfiguration('php')
-  ) {
-    return;
-  }
-  settingsCache = await loadSettings();
-};
+const STATUS_MESSAGE_MS = 4_000;
 
 /**
  * Get the document range
@@ -70,220 +43,137 @@ const documentFullRange = (document: TextDocument) =>
   );
 
 /**
- * Check if the given range covers the entire document.
- * @param {Range} range The range to check.
- * @param {TextDocument} document he text document containing the range.
- * @returns {boolean} True if the range covers the entire document, false otherwise.
- */
-const isFullDocumentRange = (range: Range, document: TextDocument): boolean =>
-  range.isEqual(documentFullRange(document));
-
-/**
- * Run the fixer process and format the document.
+ * Run the fixer process on a document.
  * @param {TextDocument} document The text document to format.
- * @param {boolean} fullDocument Whether to format the full document.
- * @returns {Promise<string>} A promise that resolves to the formatted document text.
+ * @param {CancellationToken} token Cancels the run.
+ * @returns {Promise<string | null>} The fixed document text, or `null` if there is nothing to change.
+ * @throws {Error} If PHPCBF could not be run or failed.
  */
 const format = async (
   document: TextDocument,
-  _fullDocument: boolean,
-): Promise<string> => {
+  token: CancellationToken,
+): Promise<string | null> => {
   const settings = await getSettings();
-  const workspaceFolder = workspace.getWorkspaceFolder(document.uri);
-
-  const resourceConf = settings.resources[workspaceFolder?.index ?? 0];
+  const resourceConf = getResourceSettingsFor(settings, document.uri);
 
   // If the document should not be processed, return early.
-  if (shouldProcess(document, resourceConf, 'fixer') === false) {
+  if (!resourceConf || !shouldProcess(document, resourceConf, 'fixer')) {
     // Only show information dialog if fixer is disabled.
     // (We don't want to spam users if it's not a PHP file or if it's excluded via glob patterns.)
-    if (resourceConf.fixerEnable === false) {
+    if (resourceConf?.fixerEnable === false) {
       window.showInformationMessage(
         'Fixer is disabled for this workspace or PHPCBF was not found for this workspace.',
       );
     }
-
-    return '';
+    return null;
   }
 
-  logger.startTimer('Fixer');
+  const standard = await createStandardsPathResolver(
+    document,
+    resourceConf,
+  ).resolve();
 
-  // Setup and spawn fixer process
-
-  let standard: string;
-
-  try {
-    standard = await createStandardsPathResolver(
-      document,
-      resourceConf,
-    ).resolve();
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    window.showErrorMessage(errorMessage, 'OK');
-    logger.error(errorMessage);
-
-    return '';
+  if (token.isCancellationRequested) {
+    return null;
   }
 
-  const lintArgs = getArgs(
+  const fixerArgs = getArgs(
     document.fileName,
     standard,
     resourceConf.fixerArguments,
     'fixer',
   );
-
+  const executable = resourceConf.executablePathCBF;
   const fileText = document.getText();
+  const version = document.version;
 
-  const options: SpawnSyncOptions = {
-    cwd:
-      resourceConf.workspaceRoot !== null
-        ? resourceConf.workspaceRoot
-        : undefined,
-    env: process.env,
-    encoding: 'utf8',
+  logger.info(`FIXER COMMAND: ${describeCommand(executable, fixerArgs)}`);
+  logger.startTimer('Fixer');
+
+  const run = runCommand(executable, fixerArgs, {
+    cwd: resourceConf.workspaceRoot ?? undefined,
     input: fileText,
-    // Required to prevent EINVAL errors when spawning .bat files on Windows.
-    // https://github.com/valeryan/vscode-phpsab/issues/128
-    // https://github.com/nodejs/node/issues/52554
-    shell: true,
-  };
+    timeout: FIXER_TIMEOUT_MS,
+    token,
+  });
+  window.setStatusBarMessage('PHP Code Beautifier: fixing…', run);
 
-  const CBFExecutable = resourceConf.executablePathCBF;
-  const parsedArgs = parseArgs(lintArgs);
+  const { stdout, stderr, exitCode, error, cancelled } = await run;
+  logger.endTimer('Fixer');
 
-  const command = constructCommandString(CBFExecutable, parsedArgs);
+  if (cancelled || token.isCancellationRequested) {
+    logger.info('FIXER: Run cancelled.');
+    return null;
+  }
 
-  logger.info(`FIXER COMMAND: ${command}`);
-
-  const fixer = spawnSync(command, options);
-
-  const exitcode = fixer.status;
-  const stdout = fixer.stdout.toString();
-  const stderr = fixer.stderr.toString();
-
-  // Set the original command information (not parsed) for Windows ENOENT error handling
-  const originalCommand: OriginalCommand = {
-    commandPath: CBFExecutable,
-    args: lintArgs,
-  };
-
-  const nodeError =
-    (fixer.error as ConsoleError) ||
-    addWindowsEnoentError(fixer, originalCommand, 'spawnSync');
-
-  logger.info(`FIXER EXIT CODE: ${exitcode}`);
-
+  logger.info(`FIXER EXIT CODE: ${exitCode}`);
   if (stderr) {
     logger.error(`FIXER STDERR: ${stderr.trim()}`);
   }
 
-  const fixed = stdout;
+  if (error) {
+    const { errorMsg, extraLoggerMsg } = determineNodeError(error, 'fixer');
+    // The message itself is logged by provideFixerEdits; log the details here.
+    logger.error(`FIXER NODE ERROR DETAILS: ${extraLoggerMsg}`);
+    throw new Error(errorMsg);
+  }
 
-  const errors: { [key: number]: string } = {
-    16: 'FIXER: A processing error occurred.',
-    64: 'FIXER: Requirements for running not met.',
-  };
-
-  let error: string = '';
-  let result: string = '';
-  let message: string = '';
-  let errorMsg: string = '';
-  let extraLoggerMsg: string = '';
-
-  // Test the regex against the stderr output.
-  //
-  // If fixer returns with stderr as the error "php is not recognized" or equivalent,
-  // then show an error message to the user because PHP is not on the system's environment path.
+  // "php is not recognized" or equivalent: PHP is not on the system's environment path.
   if (getPhpNotFoundRegex().test(stderr)) {
-    error = `Please add PHP to your system's environment path, or use the extension setting "phpExecutablePath". - PHPCBF error: ${stderr}`;
-
-    window.showErrorMessage(error, 'OK');
-    return '';
+    throw new Error(
+      `Please add PHP to your system's environment path, or use the extension setting "phpExecutablePath". - PHPCBF error: ${stderr.trim()}`,
+    );
   }
 
   /**
-   * PHPCBF 4.x exit codes (cumulative):
+   * PHPCBF 4.x exit codes are bit flags, any combination of:
    * 0  = clean / all fixable issues fixed with no issues remaining
-   * 1  = auto-fixable issues found/remaining
-   * 2  = non-auto-fixable issues found/remaining
-   * 3  = 1 + 2
-   * 4  = fixer conflict / failed to fix some files
-   * 5  = 1 + 4
-   * 7  = 1 + 2 + 4
-   * 16 = processing error
-   * 64 = requirements for running not met
+   * 1  = auto-fixable issues remaining
+   * 2  = non-auto-fixable issues remaining
+   * 4  = fixer conflict / failed to fix some issues
+   * Anything else (16 = processing error, 64 = requirements not met) is a failure.
    */
-  switch (exitcode) {
-    case null: {
-      if (!nodeError) {
-        return '';
-      }
-
-      // Deal with Node errors.
-      // Destructure the returned object and assign to variables.
-      ({ errorMsg, extraLoggerMsg } = determineNodeError(nodeError, 'fixer'));
-      error += errorMsg;
-
-      break;
-    }
-    case 0:
-    case 1:
-    case 2:
-    case 3:
-    case 4:
-    case 5:
-    case 7: {
-      if (hasValidFixedOutput(stdout, fileText)) {
-        result = fixed;
-        message = 'Fixes applied (some issues may remain).';
-      } else if (nodeError) {
-        // Destructure the returned object and assign to variables.
-        ({ errorMsg, extraLoggerMsg } = determineNodeError(nodeError, 'fixer'));
-        error += errorMsg;
-      } else {
-        message = 'No fixable issues were found.';
-      }
-
-      break;
-    }
-    default:
-      // A PHPCBF error occurred.
-      error =
-        errors[exitcode] ||
-        `FIXER: An unknown error occurred with exit code ${exitcode}.`;
-      if (fixed.length > 0) {
-        error += `\n${fixed}\n`;
-      }
-      if (nodeError) {
-        // Destructure the returned object and assign to variables.
-        ({ errorMsg, extraLoggerMsg } = determineNodeError(nodeError, 'fixer'));
-        error += errorMsg;
-      }
+  if (!isCompletedExitCode(exitCode)) {
+    const output = [stdout.trim(), stderr.trim()].filter(Boolean).join('\n');
+    throw new Error(
+      `${describeFailureExitCode('PHPCBF', exitCode)}${output ? `\n${output}` : ''}`,
+    );
   }
 
-  logger.endTimer('Fixer');
-
-  window.showInformationMessage(message);
-
-  if (error !== '') {
-    logger.error(`${error}${extraLoggerMsg}`);
-    return Promise.reject(error);
-  } else {
-    logger.info(`FIXER MESSAGE: ${message}`);
+  if (document.version !== version) {
+    logger.info('FIXER: Document changed while fixing; discarding result.');
+    return null;
   }
 
-  return result;
+  if (!hasValidFixedOutput(stdout, fileText)) {
+    logger.info('FIXER MESSAGE: No fixable issues were found.');
+    window.setStatusBarMessage(
+      'PHPCBF: No fixable issues were found.',
+      STATUS_MESSAGE_MS,
+    );
+    return null;
+  }
+
+  // exitCode is non-null here, as isCompletedExitCode(null) is false.
+  const code = exitCode as number;
+  let message = 'PHPCBF: Fixes applied.';
+  if (code & PHPCSExitCode.FIXER_FAILED) {
+    message = 'PHPCBF: Some fixes applied, but some issues could not be fixed.';
+  } else if (code & (PHPCSExitCode.FIXABLE | PHPCSExitCode.NON_FIXABLE)) {
+    message = 'PHPCBF: Fixes applied (some issues remain).';
+  }
+
+  logger.info(`FIXER MESSAGE: ${message}`);
+  window.setStatusBarMessage(message, STATUS_MESSAGE_MS);
+
+  return stdout;
 };
 
 /**
- * Check if the fixer output represents successfully fixed code
+ * Check if the fixer output represents successfully fixed code,
+ * i.e. it is non-empty and different from the input file text.
  *
- * It checks if the output is valid by ensuring:
- * - it's length is greater than 0; AND
- * - is different to the input file text; AND
- * - it doesn't start with a newline (EOL) character (all stdout errors start with a newline).
- *
- * @param {string} stdout The raw stdout (for EOL checking)
+ * @param {string} stdout The raw stdout of PHPCBF
  * @param {string} originalFileText The original file text
  * @returns {boolean} boolean indicating if fixes were successfully applied
  */
@@ -295,45 +185,27 @@ const hasValidFixedOutput = (
 };
 
 /**
- * Activate the fixer and register the configuration change event listener.
- * @param {Disposable[]} subscriptions Disposable array
- * @param {Settings} settings Extension settings
- */
-export const activateFixer = (
-  subscriptions: Disposable[],
-  settings: Settings,
-) => {
-  settingsCache = settings;
-  workspace.onDidChangeConfiguration(reloadSettings, null, subscriptions);
-};
-
-/**
- * Setup wrapper to format for extension
+ * Provide the formatting edits for a document. Errors are reported to the user
+ * here, once, and result in no edits.
  * @param {TextDocument} document The text document to format.
- * @param {Range} range The range within the document to format.
- * @returns {ProviderResult<TextEdit[]>} The text edits to apply to the document.
+ * @param {CancellationToken} token Cancels the run.
+ * @returns {Promise<TextEdit[]>} The text edits to apply to the document.
  */
-export const registerFixerAsDocumentProvider = (
+export const provideFixerEdits = async (
   document: TextDocument,
-  range: Range,
-): ProviderResult<TextEdit[]> => {
-  return new Promise((resolve, reject) => {
-    const fullRange = documentFullRange(document);
-    const isFullDocument = isFullDocumentRange(range, document);
+  token: CancellationToken,
+): Promise<TextEdit[]> => {
+  logger.info(`Starting to format the document: ${document.fileName}`);
 
-    format(document, isFullDocument)
-      .then((text) => {
-        if (text.length > 0) {
-          // Edit the document with the fixes.
-          return resolve([new TextEdit(fullRange, text)]);
-        } else {
-          // Nothing to fix.
-          return resolve([]);
-        }
-      })
-      .catch((err) => {
-        window.showErrorMessage(err, 'OK');
-        return reject(err);
-      });
-  });
+  try {
+    const fixed = await format(document, token);
+    return fixed === null
+      ? []
+      : [TextEdit.replace(documentFullRange(document), fixed)];
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(message);
+    window.showErrorMessage(message, 'OK');
+    return [];
+  }
 };

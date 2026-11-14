@@ -1,9 +1,4 @@
-import {
-  type Uri,
-  type WorkspaceConfiguration,
-  window,
-  workspace,
-} from 'vscode';
+import { type Uri, type WorkspaceConfiguration, workspace } from 'vscode';
 import { checkPhpcsVersionCompatibility } from './compatibility';
 import type {
   ResourceSettings,
@@ -21,6 +16,7 @@ import {
   executableExists,
 } from './resolvers/path-resolver-utils';
 import { getExtensionInfo } from './utils/helpers';
+import { showWarningOnce } from './utils/notifications';
 
 /**
  * Check if the editor is in single file mode.
@@ -73,17 +69,85 @@ const validate = async (
 
   if (msg) {
     logger.warn(msg);
-    window.showWarningMessage(msg, 'OK');
+    showWarningOnce(msg);
   }
 
   return settings;
 };
 
 /**
+ * The most recently loaded settings.
+ */
+let settingsCache: Settings | undefined;
+
+/**
+ * The settings load currently in progress, if any.
+ */
+let pendingLoad: Promise<Settings> | undefined;
+
+/**
+ * Incremented on every reload, so a slow, outdated load never overwrites a newer one.
+ */
+let loadGeneration = 0;
+
+/**
+ * Get the current settings, loading them on first use.
+ * This is the single shared settings store for the sniffer and the fixer.
+ * @returns {Promise<Settings>} The current settings.
+ */
+export const getSettings = (): Promise<Settings> => {
+  if (settingsCache) {
+    return Promise.resolve(settingsCache);
+  }
+  return pendingLoad ?? reloadSettings();
+};
+
+/**
+ * Reload the settings, e.g. after a configuration or workspace folder change.
+ * @returns {Promise<Settings>} The newly loaded settings.
+ */
+export const reloadSettings = (): Promise<Settings> => {
+  const generation = ++loadGeneration;
+
+  const load = loadSettings().then(
+    (settings) => {
+      if (generation === loadGeneration) {
+        settingsCache = settings;
+        pendingLoad = undefined;
+      }
+      return settings;
+    },
+    (error: unknown) => {
+      if (generation === loadGeneration) {
+        pendingLoad = undefined;
+      }
+      throw error;
+    },
+  );
+
+  pendingLoad = load;
+  return load;
+};
+
+/**
+ * Get the settings of the workspace folder that contains a document.
+ * @param {Settings} settings The extension settings.
+ * @param {Uri} uri The document URI.
+ * @returns {ResourceSettings | undefined} The resource settings, if any.
+ */
+export const getResourceSettingsFor = (
+  settings: Settings,
+  uri: Uri,
+): ResourceSettings | undefined => {
+  const workspaceFolder = workspace.getWorkspaceFolder(uri);
+  return settings.resources[workspaceFolder?.index ?? 0];
+};
+
+/**
  * Load and validate the extension settings.
  * @returns {Promise<Settings>} The loaded and validated settings.
  */
-export const loadSettings = async (): Promise<Settings> => {
+const loadSettings = async (): Promise<Settings> => {
   const resourcesSettings: Array<ResourceSettings> = [];
 
   const globalConfig = workspace.getConfiguration('phpsab', null);
@@ -96,26 +160,24 @@ export const loadSettings = async (): Promise<Settings> => {
     const warningMsg = `No workspace folder open. ${displayName} will run with limited functionality. Please open a folder or workspace.`;
 
     logger.warn(warningMsg);
-    window.showWarningMessage(warningMsg, 'OK');
+    showWarningOnce(warningMsg);
 
-    let settings = await getSettings(globalConfig);
+    let settings = await getResourceSettings(globalConfig);
     settings = await validate(settings, 'Single File Mode');
 
     resourcesSettings.push(settings);
   } else {
     // Handle per Workspace settings
 
-    // We know workspaceFolders is not null from the isSingleFileMode check above,
-    // so we can assert it with the non-null assertion operator `!`.
-    // https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#non-null-assertion-operator-postfix-
-    const workspaceFolders = workspace.workspaceFolders!;
+    // workspaceFolders is not undefined here, because of the isSingleFileMode check above.
+    const workspaceFolders = workspace.workspaceFolders ?? [];
 
     for (let index = 0; index < workspaceFolders.length; index++) {
       const resource = workspaceFolders[index].uri;
       const config = workspace.getConfiguration('phpsab', resource);
       const rootPath = resolveRootPath(resource);
 
-      let settings = await getSettings(config, rootPath);
+      let settings = await getResourceSettings(config, rootPath);
 
       settings = await validate(settings, workspaceFolders[index].name);
 
@@ -141,10 +203,13 @@ export const loadSettings = async (): Promise<Settings> => {
     addPhpToEnvPath(settings.phpExecutablePath);
   }
 
-  await checkPhpcsVersionCompatibility(settings);
-
   logger.setDebugMode(settings.debug);
   logger.debug('CONFIGURATION', settings);
+
+  // Only produces warnings, so don't hold up activation or linting waiting for it.
+  checkPhpcsVersionCompatibility(settings).catch((error: unknown) => {
+    logger.error(`Version compatibility check failed: ${error}`);
+  });
 
   return settings;
 };
@@ -155,7 +220,7 @@ export const loadSettings = async (): Promise<Settings> => {
  * @param {string | null} rootPath The root path of the workspace or `null` if in single file mode.
  * @returns {Promise<ResourceSettings>} The resource settings for the workspace.
  */
-const getSettings = async (
+const getResourceSettings = async (
   config: WorkspaceConfiguration,
   rootPath: string | null = null,
 ): Promise<ResourceSettings> => {
@@ -170,8 +235,10 @@ const getSettings = async (
     autoRulesetSearch: config.get<boolean>('autoRulesetSearch', true),
     allowedAutoRulesets: config.get<string[]>('allowedAutoRulesets', [
       '.phpcs.xml',
+      '.phpcs.xml.dist',
       'phpcs.xml',
-      'phpcs.dist.xml',
+      'phpcs.xml.dist',
+      'phpcs.ruleset.xml',
       'ruleset.xml',
     ]),
     snifferEnable: config.get<boolean>('snifferEnable', true),

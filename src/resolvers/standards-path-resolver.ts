@@ -1,12 +1,13 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { type TextDocument, window, workspace } from 'vscode';
+import { type TextDocument, workspace } from 'vscode';
 import type { ConsoleError } from '../interfaces/console-error';
 import type { PathResolver } from '../interfaces/path-resolver';
 import type { ResourceSettings } from '../interfaces/settings';
 import { logger } from '../logger';
 import { isSingleFileMode } from '../settings';
 import { getErrorCodeDescription } from '../utils/error-handling/error-helpers';
+import { showWarningOnce } from '../utils/notifications';
 import {
   expandHomeDir,
   getPlatformExtension,
@@ -32,7 +33,10 @@ export const createStandardsPathResolver = (
     extension,
     pathSeparator,
     resolve: async (): Promise<string> => {
-      const errors: any = {};
+      const errors: Record<
+        string,
+        { errorCodeDescription: string; paths: string[] }
+      > = {};
       // `standard` may be a comma-separated list, so trim, expand `~`,
       // and normalize each entry individually.
       const configured = (config.standard ?? '')
@@ -104,7 +108,7 @@ export const createStandardsPathResolver = (
         for (let i = 0, len = files.length; i < len; i++) {
           const c = files[i];
           try {
-            await fs.access(c, fs.constants.R_OK | fs.constants.W_OK);
+            await fs.access(c, fs.constants.R_OK);
 
             logger.info(`Using the found coding standard ruleset: "${c}"`);
 
@@ -123,7 +127,7 @@ export const createStandardsPathResolver = (
               };
             }
             // Store the path.
-            errors[errorCode].paths.push(error.path);
+            errors[errorCode].paths.push(error.path ?? c);
           }
         }
       }
@@ -141,11 +145,7 @@ export const createStandardsPathResolver = (
         logger.warn(warningTxt);
 
         let errorMessage = 'Errors encountered while searching for rulesets:\n';
-        for (const [errorCode, errorInfo] of Object.entries(errors)) {
-          const info = errorInfo as {
-            errorCodeDescription: string;
-            paths: string[];
-          };
+        for (const [errorCode, info] of Object.entries(errors)) {
           errorMessage += `${errorCode}: ${info.errorCodeDescription}\n`;
           info.paths.forEach((path: string) => {
             errorMessage += `  - "${path}"\n`;
@@ -154,7 +154,10 @@ export const createStandardsPathResolver = (
 
         logger.debug(errorMessage);
 
-        window.showWarningMessage(warningTxt);
+        // This is re-checked on every run, so only notify once per
+        // workspace folder and configured standard.
+        const folderName = folder?.name ?? 'this workspace';
+        showWarningOnce(`${folderName}: ${warningTxt}`);
       }
 
       // If no ruleset was found, return the configured standard.

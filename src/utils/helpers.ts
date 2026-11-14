@@ -204,29 +204,34 @@ const validateAdditionalArguments = (
 };
 
 /**
+ * Quote a single command line argument for the current OS's shell.
+ *
+ * - Windows (`cmd.exe`): wrap in double quotes. `%` would still trigger variable
+ *   expansion inside quotes, so it is moved outside the quotes and escaped with `^`
+ *   (`a%b` becomes `"a"^%"b"`). Windows paths cannot contain `"`.
+ * - POSIX shells: wrap in single quotes, and turn every embedded single quote into
+ *   `'\''` (close quote, escaped quote, reopen quote).
+ *
+ * @see https://ss64.com/nt/syntax-esc.html for Windows quoting rules
+ * @see https://ss64.com/bash/syntax-quoting.html for *nix quoting rules
+ *
+ * @param {string} arg The argument to quote.
+ * @returns {string} The quoted argument.
+ */
+export const quoteArg = (arg: string): string =>
+  isWin()
+    ? `"${arg.replace(/%/g, '"^%"')}"`
+    : `'${arg.replace(/'/g, `'\\''`)}'`;
+
+/**
  * Parse command line arguments.
  * @param {string[]} args The command line arguments to parse.
  * @returns {string[]} The parsed arguments.
  */
 export const parseArgs = (args: string[]): string[] => {
-  /**
-   * Quotes a command line argument based on the OS.
-   * Wraps the argument in the appropriate quotes for the OS;
-   * Windows uses double quotes and *nix uses single quotes.
-   *
-   * @see https://ss64.com/nt/syntax-esc.html#quotes for Windows quoting rules
-   * @see https://ss64.com/bash/syntax-quoting.html for *nix quoting rules
-   *
-   * @param {string} arg The argument to quote.
-   * @returns {string} The quoted argument.
-   */
-  const quote = isWin()
-    ? (arg: string) => `"${arg}"`
-    : (arg: string) => `'${arg}'`;
-
   // Wrap each argument in OS-appropriate quotes to preserve
   // spaces in paths and prevent command injection.
-  return args.map(quote);
+  return args.map(quoteArg);
 };
 
 /**
@@ -476,11 +481,9 @@ const isAdditionalArgumentKey = (
  * @returns {string} The constructed command string.
  */
 export const constructCommandString = (command: string, args: string[]) => {
-  // Wrap command in quotes to handle spaces in paths.
-  command = `"${command}"`;
-
-  // Concatenate the command and the arguments together delimited by spaces.
-  return `${command} ${args.join(' ')}`;
+  // Wrap command in quotes to handle spaces in paths, then concatenate
+  // the command and the (already quoted) arguments delimited by spaces.
+  return [quoteArg(command), ...args].join(' ');
 };
 
 /**
@@ -500,9 +503,13 @@ export const getEOL = (): string => {
  */
 export const shouldProcess = (
   document: TextDocument,
-  resourceConf: ResourceSettings,
+  resourceConf: ResourceSettings | undefined,
   toolType: 'sniffer' | 'fixer',
 ): boolean => {
+  if (!resourceConf) {
+    return false;
+  }
+
   let isEnabled = false;
   if (toolType === 'sniffer') {
     isEnabled = resourceConf.snifferEnable;

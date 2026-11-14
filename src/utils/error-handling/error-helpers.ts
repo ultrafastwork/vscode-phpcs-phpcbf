@@ -12,8 +12,7 @@ export const determineNodeError = (
   toolType: 'sniffer' | 'fixer',
 ): { errorMsg: string; extraLoggerMsg: string } => {
   let errorMsg = `${toolType.toUpperCase()} NODE ERROR: `;
-  // Assert code is not undefined.
-  const code = nodeError.code!;
+  const code = nodeError.code ?? 'UNKNOWN';
 
   // Timeout error
   if (code === 'ETIMEDOUT') {

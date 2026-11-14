@@ -25,17 +25,17 @@ import { isWin } from '../../resolvers/path-resolver-utils';
  * Add ENOENT error handling for Windows spawned processes using spawn or spawnSync.
  * @param {ChildProcess| SpawnSyncReturns<string | Buffer>} cp The ChildProcess instance or SpawnSyncReturns object
  * @param {OriginalCommand} originalCommand The original command information
- * @returns {Error | null | void} For spawnSync returns the `Error` object if ENOENT detected, `null` otherwise. For spawn and non-Windows systems returns `void`.
+ * @returns {Error | null | undefined} For spawnSync returns the `Error` object if ENOENT detected, `null` otherwise. For spawn and non-Windows systems returns `undefined`.
  */
 export function addWindowsEnoentError(
   cp: ChildProcess | SpawnSyncReturns<string | Buffer>,
   originalCommand: OriginalCommand,
   syscall: 'spawn' | 'spawnSync',
-): Error | null | void {
+): Error | null | undefined {
   // If not on Windows, don't do anything
   if (!isWin()) {
     logger.info('Not on Windows, skipping ENOENT handler setup.');
-    return;
+    return undefined;
   }
 
   if (syscall === 'spawn') {
@@ -60,11 +60,15 @@ function hookIntoEmit(cp: ChildProcess, originalCommand: OriginalCommand) {
   const originalEmit = cp.emit.bind(cp);
 
   // Override emit method with custom logic to handle "exit" events
-  cp.emit = ((name: string, ...args: any[]) => {
+  cp.emit = ((name: string, ...args: unknown[]) => {
     // If emitting "exit" event...
     if (name === 'exit') {
       // Verify if it is indeed an ENOENT error.
-      const err = verifyEnoentError(args[0], originalCommand, 'spawn');
+      const err = verifyEnoentError(
+        args[0] as number | null,
+        originalCommand,
+        'spawn',
+      );
 
       // If there is an error, emit "error" event instead of "exit"
       // with the error object.
@@ -75,7 +79,7 @@ function hookIntoEmit(cp: ChildProcess, originalCommand: OriginalCommand) {
 
     // For all other events, just call the original emit method.
     return originalEmit(name, ...args);
-  }) as any;
+  }) as ChildProcess['emit'];
 }
 
 /**

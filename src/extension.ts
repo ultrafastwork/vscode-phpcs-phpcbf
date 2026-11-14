@@ -2,11 +2,16 @@
  * Copyright (c) 2019 Samuel Hilson. All rights reserved.
  * Licensed under the MIT License. See License.md in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
-import { commands, type ExtensionContext, languages } from 'vscode';
-import { activateFixer, registerFixerAsDocumentProvider } from './fixer';
+import { commands, type ExtensionContext, languages, workspace } from 'vscode';
+import { provideFixerEdits } from './fixer';
 import { disposeLogger, logger } from './logger';
-import { loadSettings } from './settings';
-import { activateSniffer, disposeSniffer } from './sniffer';
+import { getSettings, reloadSettings } from './settings';
+import {
+  activateSniffer,
+  disposeSniffer,
+  onSnifferSettingsChanged,
+  refreshSniffer,
+} from './sniffer';
 import { getExtensionInfo, setExtensionInfo } from './utils/helpers';
 
 /**
@@ -22,9 +27,31 @@ export const activate = async (context: ExtensionContext) => {
   logger.log(`Extension Display Name: ${displayName}.`);
   logger.log(`Extension Version: ${version}.`);
 
-  const settings = await loadSettings();
-  activateFixer(context.subscriptions, settings);
-  activateSniffer(context.subscriptions, settings);
+  await getSettings();
+
+  // A single listener reloads the shared settings, then notifies the sniffer.
+  context.subscriptions.push(
+    workspace.onDidChangeConfiguration(async (event) => {
+      if (
+        !event.affectsConfiguration('phpsab') &&
+        !event.affectsConfiguration('php')
+      ) {
+        return;
+      }
+      await reloadSettings();
+      onSnifferSettingsChanged(event);
+    }),
+  );
+
+  // Resource settings are per workspace folder, so reload when folders change.
+  context.subscriptions.push(
+    workspace.onDidChangeWorkspaceFolders(async () => {
+      await reloadSettings();
+      refreshSniffer();
+    }),
+  );
+
+  activateSniffer(context.subscriptions);
 
   // Register format from command palette
   context.subscriptions.push(
@@ -35,20 +62,14 @@ export const activate = async (context: ExtensionContext) => {
     }),
   );
 
-  // Register as document formatter for php
+  // Register as document formatter for php. PHPCBF always fixes the whole file,
+  // so it is registered as a document formatter rather than a range formatter.
   context.subscriptions.push(
-    languages.registerDocumentRangeFormattingEditProvider(
+    languages.registerDocumentFormattingEditProvider(
       { scheme: 'file', language: 'php' },
       {
-        provideDocumentRangeFormattingEdits: async (document, range) => {
-          logger.info(`Starting to format the document: ${document.fileName}`);
-          try {
-            return await registerFixerAsDocumentProvider(document, range);
-          } catch (error) {
-            logger.error(`DEBUG: Error in provider: ${error}`);
-            throw error;
-          }
-        },
+        provideDocumentFormattingEdits: (document, _options, token) =>
+          provideFixerEdits(document, token),
       },
     ),
   );
@@ -58,6 +79,6 @@ export const activate = async (context: ExtensionContext) => {
  * Deactivate Extension
  */
 export const deactivate = () => {
-  disposeLogger();
   disposeSniffer();
+  disposeLogger();
 };
